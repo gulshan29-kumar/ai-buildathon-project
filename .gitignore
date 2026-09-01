@@ -1,0 +1,43 @@
+# Node / Next.js
+.next/
+out/
+node_modules/
+.npm/
+.env.local
+.env.development.local
+.env.production.local
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project-specific
+*.log
+
+# Data artifacts
+/data/*.csv
+/data/*.json
+/data/*.parquet
+
+# Build artifacts
+build/
+dist/
