@@ -37,7 +37,12 @@ Thumbs.db
 /data/*.csv
 /data/*.json
 /data/*.parquet
+data/synthetic/
+data/synthetic_sample/
+*.joblib
+models/*.joblib
 
 # Build artifacts
 build/
 dist/
+
