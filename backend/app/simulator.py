@@ -54,6 +54,16 @@ class StatefulPaymentSimulator:
         self.idempotency_keys: Dict[str, str] = {}  # idempotency_key -> transaction_id
         self.scheduled_jobs: List[Dict[str, Any]] = []
 
+    def reset(self, seed: Optional[int] = None) -> None:
+        """Resets simulator payments, events, idempotency cache, and random generator."""
+        self.payments.clear()
+        self.events.clear()
+        self.idempotency_keys.clear()
+        self.scheduled_jobs.clear()
+        if seed is not None:
+            self.rng = random.Random(seed)
+
+
     def _record_event(
         self,
         transaction_id: str,
