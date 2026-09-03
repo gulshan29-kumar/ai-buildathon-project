@@ -106,7 +106,23 @@ class PolicyEngine:
             "metadata": event_metadata or {},
         }
         self.audit_records.append(audit_entry)
+
+        try:
+            from backend.app.audit_trail import AuditTrail
+            AuditTrail.get_instance().log_event(
+                transaction_id=transaction_id or "unknown",
+                event_type="POLICY_CHECKED",
+                actor="POLICY_ENGINE",
+                selected_action=action,
+                policy_result="DENY",
+                policy_rule=rule_id,
+                input_summary={"severity": severity, "reason": reason, "metadata": event_metadata or {}},
+            )
+        except Exception:
+            pass
+
         return True
+
 
     def evaluate(
         self,

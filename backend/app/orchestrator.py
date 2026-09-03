@@ -10,12 +10,14 @@ from backend.app.action_predictor import (
     SUPPORTED_ACTIONS,
     ActionRecoveryPredictor,
 )
+from backend.app.audit_trail import AuditTrail
 from backend.app.decision_engine import DecisionEngine
 from backend.app.failure_classifier import FailureClassifier
 from backend.app.policy_engine import PolicyDecision, PolicyEngine
 from backend.app.simulator import PaymentSimulator, PolicyBlockedExecutionError
 
 logger = logging.getLogger(__name__)
+
 
 try:
     from langgraph.graph import END, START, StateGraph
@@ -216,6 +218,12 @@ class RecoveryOrchestrator:
 
         state["logs"].append({"node": "EVENT", "message": f"Ingested event for {txn_id}", "timestamp": datetime.now(timezone.utc).isoformat()})
         self.tools.log_audit_event("ORCHESTRATOR_EVENT_INGESTED", txn_id, {"event": event})
+        AuditTrail.get_instance().log_event(
+            transaction_id=txn_id,
+            event_type="PAYMENT_FAILED",
+            actor="SIMULATOR",
+            input_summary={"amount": event.get("amount"), "failure_code": event.get("failure_code"), "status": "FAILED"},
+        )
         return state
 
     def node_load_context(self, state: RecoveryAgentState) -> RecoveryAgentState:
@@ -273,6 +281,13 @@ class RecoveryOrchestrator:
             state["root_cause"] = {"failure_code": "UNKNOWN", "category": "TECHNICAL", "automatic_recovery": True}
 
         state["logs"].append({"node": "ROOT_CAUSE", "root_cause": state["root_cause"]})
+        AuditTrail.get_instance().log_event(
+            transaction_id=state["transaction_id"],
+            event_type="ROOT_CAUSE_IDENTIFIED",
+            actor="ORCHESTRATOR",
+            root_cause=state["root_cause"],
+            input_summary={"failure_code": code},
+        )
         return state
 
     def node_ml_prediction(self, state: RecoveryAgentState) -> RecoveryAgentState:
@@ -281,6 +296,13 @@ class RecoveryOrchestrator:
         prediction = self.tools.predict_recovery(txn)
         state["ml_prediction"] = prediction
         state["logs"].append({"node": "ML_PREDICTION", "prediction": prediction})
+        AuditTrail.get_instance().log_event(
+            transaction_id=state["transaction_id"],
+            event_type="RECOVERY_PREDICTED",
+            actor="ML_MODEL",
+            recovery_probability=prediction.get("recovery_probability"),
+            model_version="v1.2.0",
+        )
         return state
 
     def node_action_analysis(self, state: RecoveryAgentState) -> RecoveryAgentState:
@@ -297,7 +319,6 @@ class RecoveryOrchestrator:
         txn = state.get("transaction", {})
         cust = state.get("customer_context", {})
 
-
         for cand in state.get("candidate_actions", []):
             decision = self.tools.check_policy(cand["action"], txn, cust)
             cand["permitted"] = decision.allowed
@@ -306,7 +327,14 @@ class RecoveryOrchestrator:
             cand["reason"] = decision.reason
 
         state["logs"].append({"node": "POLICY_CHECK", "message": "Policy checks evaluated for candidate actions"})
+        AuditTrail.get_instance().log_event(
+            transaction_id=state["transaction_id"],
+            event_type="POLICY_CHECKED",
+            actor="POLICY_ENGINE",
+            candidate_actions=state.get("candidate_actions"),
+        )
         return state
+
 
     def node_decision(self, state: RecoveryAgentState) -> RecoveryAgentState:
         """Node 7: DECISION - Select best permitted action with explainable reasoning."""
@@ -377,6 +405,15 @@ class RecoveryOrchestrator:
             state["policy_decision"] = {"status": "PERMITTED_VIA_LLM_ADVISORY", "reasoning": "Selected by LLM advisory and verified by safety policy."}
 
         state["logs"].append({"node": "DECISION", "selected_action": state["selected_action"]})
+        AuditTrail.get_instance().log_event(
+            transaction_id=state["transaction_id"],
+            event_type="ACTION_SELECTED",
+            actor="AGENT" if not state.get("fallback_mode") else "DECISION_ENGINE",
+            selected_action=state.get("selected_action"),
+            expected_value=state.get("policy_decision", {}).get("ev"),
+            candidate_actions=state.get("candidate_actions"),
+            agent_version="v1.0.0",
+        )
         return state
 
     def node_execute_action(self, state: RecoveryAgentState) -> RecoveryAgentState:
@@ -416,6 +453,13 @@ class RecoveryOrchestrator:
             state["execution_result"] = {"error": "SIMULATOR_FAILURE", "detail": str(e), "simulated": True}
 
         state["logs"].append({"node": "EXECUTE_ACTION", "action": act, "result": state.get("execution_result")})
+        AuditTrail.get_instance().log_event(
+            transaction_id=state["transaction_id"],
+            event_type="ACTION_EXECUTED",
+            actor="ACTION_TOOL",
+            selected_action=act,
+            execution_result=state.get("execution_result"),
+        )
         return state
 
     def node_monitor_result(self, state: RecoveryAgentState) -> RecoveryAgentState:
@@ -449,7 +493,47 @@ class RecoveryOrchestrator:
             state["monitoring_outcome"] = "STOP"
 
         state["logs"].append({"node": "MONITOR_RESULT", "outcome": state["monitoring_outcome"]})
+
+        outcome = state["monitoring_outcome"]
+        txn = state.get("transaction", {})
+        amount = float(txn.get("amount", state.get("event", {}).get("amount", 0.0)))
+
+        if outcome == "RECOVERED":
+            AuditTrail.get_instance().log_event(
+                transaction_id=state["transaction_id"],
+                event_type="PAYMENT_RECOVERED",
+                actor="ORCHESTRATOR",
+                revenue_recovered=amount,
+                execution_result=res,
+                selected_action=act,
+            )
+        elif outcome == "ESCALATE":
+            AuditTrail.get_instance().log_event(
+                transaction_id=state["transaction_id"],
+                event_type="ESCALATED",
+                actor="POLICY_ENGINE",
+                execution_result=res,
+                selected_action=act,
+            )
+        elif outcome == "STOP":
+            AuditTrail.get_instance().log_event(
+                transaction_id=state["transaction_id"],
+                event_type="STOPPED",
+                actor="POLICY_ENGINE",
+                execution_result=res,
+                selected_action=act,
+            )
+        elif res.get("status") == "FAILED":
+            AuditTrail.get_instance().log_event(
+                transaction_id=state["transaction_id"],
+                event_type="RECOVERY_FAILED",
+                actor="SIMULATOR",
+                execution_result=res,
+                selected_action=act,
+            )
+
         return state
+
 
     # --- Graph Construction ---
 

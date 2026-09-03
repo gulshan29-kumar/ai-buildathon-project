@@ -8,10 +8,12 @@ from backend.app.action_predictor import (
     predict_action_recovery,
     predict_all_action_recoveries,
 )
+from backend.app.audit_trail import AuditTrail
 from backend.app.config import settings
 from backend.app.decision_engine import DecisionEngine
 from backend.app.failure_classifier import FailureClassifier
 from backend.app.orchestrator import AgentTools, RecoveryOrchestrator
+
 from backend.app.policy_engine import PolicyEngine
 from backend.app.root_cause_agent import RootCauseAgent
 from backend.app.simulator import PaymentSimulator, PolicyBlockedExecutionError
@@ -178,6 +180,21 @@ def analyze_root_cause(payload: Dict[str, Any]) -> Dict[str, Any]:
         payment_context=pay_ctx,
     )
     return res.to_dict()
+
+
+@app.get("/api/audit/{transaction_id}")
+def get_transaction_audit_trail(transaction_id: str) -> Dict[str, Any]:
+    """Retrieves chronological, immutable-style audit timeline for a transaction with cryptographic verification."""
+    audit_trail = AuditTrail.get_instance()
+    timeline = audit_trail.get_timeline(transaction_id)
+    is_valid = audit_trail.verify_integrity(transaction_id)
+    return {
+        "transaction_id": transaction_id,
+        "count": len(timeline),
+        "verified_integrity": is_valid,
+        "events": timeline,
+    }
+
 
 
 
