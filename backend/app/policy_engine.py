@@ -129,8 +129,20 @@ class PolicyEngine:
         classification = FailureClassifier.classify(failure_type) if failure_type else None
 
         # Rule 11 (POL-011): LLM/override bypass protection
-        # If event contains bypass flags (e.g. llm_override, bypass_guardrails, force_retry), reject immediately
-        if event.get("llm_override") or event.get("bypass_guardrails") or event.get("force_bypass"):
+        notes_str = str(event.get("notes", "")).lower()
+        prompt_str = str(event.get("prompt", "") or event.get("instructions", "")).lower()
+        has_prompt_injection = any(
+            phrase in notes_str or phrase in prompt_str
+            for phrase in ["ignore all prior", "bypass guardrails", "ignore policy", "override policy", "jailbreak", "override guardrails"]
+        )
+        if (
+            event.get("llm_override")
+            or event.get("bypass_guardrails")
+            or event.get("force_bypass")
+            or event.get("force_retry")
+            or event.get("override_policy")
+            or has_prompt_injection
+        ):
             self.log_denial_audit("POL-011", action, "Bypass attempt rejected: LLM and external overrides cannot bypass safety policy", PolicySeverity.CRITICAL.value, txn_id)
             return PolicyDecision(
                 outcome=PolicyOutcome.DENY,
@@ -142,6 +154,7 @@ class PolicyEngine:
                 classification=classification,
                 audit_logged=True,
             )
+
 
         # Rule 1 (POL-001): Never retry a successful transaction
         if raw_status == "SUCCESS":
