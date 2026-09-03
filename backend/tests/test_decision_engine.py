@@ -183,3 +183,63 @@ def test_edge_case_9_missing_context(decision_engine):
     assert isinstance(decision, RecoveryDecision)
     assert decision.selected_action is not None
     assert decision.expected_recovery_value >= 0.0
+
+
+def test_payment_context_fallback_and_retry_limits(decision_engine):
+    # Transaction lacks amount/status, supplied via payment_context
+    pay_ctx = {
+        "order_id": "ord_ctx_999",
+        "amount": 7500.0,
+        "status": "FAILED",
+        "failure_code": "GATEWAY_TIMEOUT",
+        "previous_retry_count": 2,  # Reached limit
+    }
+    action_probs = {
+        "RETRY_PAYMENT": 0.85,
+        "SWITCH_PAYMENT_METHOD": 0.70,
+        "SCHEDULE_RETRY": 0.50,
+    }
+    decision = decision_engine.decide(
+        transaction={},
+        payment_context=pay_ctx,
+        action_probabilities=action_probs,
+    )
+    # Retry payment is blocked due to previous_retry_count=2, fallback to SWITCH_PAYMENT_METHOD
+    assert decision.selected_action == "SWITCH_PAYMENT_METHOD"
+    assert decision.expected_recovery_value == round(7500.0 * 0.70, 2)
+
+
+def test_preferred_payment_method_recommendation(decision_engine):
+    txn = {
+        "transaction_id": "txn_pref_method",
+        "amount": 3000.0,
+        "failure_code": "CARD_EXPIRED",
+        "payment_method": "CARD",
+    }
+    cust = {
+        "customer_id": "cust_123",
+        "preferred_payment_method": "UPI",
+    }
+    decision = decision_engine.decide(
+        transaction=txn,
+        customer_context=cust,
+        available_payment_methods=["NETBANKING", "UPI", "WALLET"],
+    )
+    # Finding candidate for SWITCH_PAYMENT_METHOD
+    cands_map = {c.action: c for c in decision.candidates}
+    switch_cand = cands_map["SWITCH_PAYMENT_METHOD"]
+    assert switch_cand.permitted is True
+    assert switch_cand.parameters["suggested_method"] == "UPI"
+
+
+def test_no_llm_dependency():
+    """Verify that DecisionEngine operates purely deterministically without any LLM."""
+    import inspect
+    from backend.app.decision_engine import DecisionEngine
+
+    source = inspect.getsource(DecisionEngine)
+    assert "openai" not in source.lower()
+    assert "anthropic" not in source.lower()
+    assert "langchain" not in source.lower()
+    assert "prompt" not in source.lower()
+

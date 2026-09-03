@@ -96,17 +96,37 @@ class DecisionEngine:
         cust = dict(customer_context or {})
         pay_ctx = dict(payment_context or {})
 
-        txn_id = str(txn.get("transaction_id") or txn.get("id") or "txn_unknown")
-        amount = max(0.0, float(txn.get("amount", 0.0)))
-        status = str(txn.get("status", "FAILED")).upper()
-        failure_code = str(txn.get("failure_code") or txn.get("failure_type") or "").upper()
-        risk_score = max(0.0, float(txn.get("risk_score") or cust.get("risk_score", 0.05)))
-        current_method = str(txn.get("payment_method") or "UPI").upper()
-        previous_attempts = int(txn.get("attempt_number", 1)) - 1
-        if previous_attempts < 0:
-            previous_attempts = int(txn.get("previous_attempts", 0))
+        txn_id = str(txn.get("transaction_id") or txn.get("id") or pay_ctx.get("order_id") or "txn_unknown")
+        try:
+            amount = max(0.0, float(txn.get("amount", pay_ctx.get("amount", 0.0))))
+        except (ValueError, TypeError):
+            amount = 0.0
+
+        status = str(txn.get("status", pay_ctx.get("status", "FAILED"))).upper()
+        failure_code = str(txn.get("failure_code") or txn.get("failure_type") or pay_ctx.get("failure_code") or "").upper()
+        
+        try:
+            risk_score = max(0.0, float(txn.get("risk_score") or cust.get("risk_score") or pay_ctx.get("risk_score", 0.05)))
+        except (ValueError, TypeError):
+            risk_score = 0.05
+
+        current_method = str(txn.get("payment_method") or pay_ctx.get("payment_method") or "UPI").upper()
+        
+        # Calculate retry count from txn or payment_context
+        previous_attempts = 0
+        if "attempt_number" in txn:
+            previous_attempts = max(0, int(txn["attempt_number"]) - 1)
+        elif "previous_attempts" in txn:
+            previous_attempts = max(0, int(txn["previous_attempts"]))
+        elif "attempt_count" in txn:
+            previous_attempts = max(0, int(txn["attempt_count"]))
+        elif "previous_retry_count" in pay_ctx:
+            previous_attempts = max(0, int(pay_ctx["previous_retry_count"]))
+        elif "attempt_count" in pay_ctx:
+            previous_attempts = max(0, int(pay_ctx["attempt_count"]))
 
         classification = FailureClassifier.classify(failure_code) if failure_code else None
+
 
         # Edge Case 1: Already successful
         if status == "SUCCESS":
@@ -219,7 +239,12 @@ class DecisionEngine:
                     permitted = False
                     rejection_reason = "No alternative payment methods available for method switch."
                 else:
-                    parameters["suggested_method"] = supported_alternatives[0]
+                    pref = cust.get("preferred_payment_method", "").upper()
+                    if pref and pref in supported_alternatives:
+                        parameters["suggested_method"] = pref
+                    else:
+                        parameters["suggested_method"] = supported_alternatives[0]
+
 
             if act == "SCHEDULE_RETRY":
                 parameters["delay_seconds"] = 300
