@@ -11,6 +11,7 @@ from backend.app.action_predictor import (
 from backend.app.config import settings
 from backend.app.decision_engine import DecisionEngine
 from backend.app.failure_classifier import FailureClassifier
+from backend.app.orchestrator import AgentTools, RecoveryOrchestrator
 from backend.app.policy_engine import PolicyEngine
 from backend.app.simulator import PaymentSimulator, PolicyBlockedExecutionError
 
@@ -28,6 +29,9 @@ app.add_middleware(
 decision_engine = DecisionEngine()
 simulator = PaymentSimulator()
 policy_engine = PolicyEngine()
+agent_tools = AgentTools(simulator=simulator, policy_engine=policy_engine)
+orchestrator = RecoveryOrchestrator(tools=agent_tools)
+
 
 
 @app.get("/health")
@@ -149,4 +153,11 @@ def list_policies() -> Dict[str, Any]:
             {"rule_id": "POL-012", "name": "Policy Runs Before Execution", "outcome": "ENFORCE", "severity": "CRITICAL"},
         ]
     }
+
+
+@app.post("/api/orchestrate")
+def orchestrate_recovery(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Agentic recovery orchestrator endpoint executing LangGraph recovery workflow."""
+    return orchestrator.run(payload)
+
 

@@ -95,3 +95,21 @@ def test_api_predict_single_action_endpoint():
     assert data["expected_recovery_value"] == round(3000.0 * data["probability"], 2)
 
 
+def test_api_orchestrate_endpoint():
+    payload = {
+        "transaction_id": "txn_api_orch_1",
+        "amount": 3500.0,
+        "failure_code": "GATEWAY_TIMEOUT",
+        "payment_method": "UPI",
+        "risk_score": 0.05,
+    }
+    response = client.post("/api/orchestrate", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["transaction_id"] == "txn_api_orch_1"
+    assert data["monitoring_outcome"] == "RECOVERED"
+    assert data["selected_action"] == "RETRY_PAYMENT"
+    assert "execution_result" in data
+
+
+

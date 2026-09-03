@@ -115,6 +115,7 @@ class StatefulPaymentSimulator:
         failure_code: Optional[str] = None,
         risk_score: float = 0.05,
         metadata: Optional[Dict[str, Any]] = None,
+        transaction_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Creates a new simulated payment, validating duplicates and policy checks."""
         # Check Duplicate Payment prevention (Rule 2)
@@ -145,8 +146,8 @@ class StatefulPaymentSimulator:
                 "Execution blocked by policy: High fraud risk payment cannot reach execution (Rule: POL-003)"
             )
 
+        transaction_id = transaction_id or f"txn_sim_{uuid.uuid4().hex[:12]}"
 
-        transaction_id = f"txn_sim_{uuid.uuid4().hex[:12]}"
         if idempotency_key:
             self.idempotency_keys[idempotency_key] = transaction_id
 
