@@ -147,3 +147,57 @@ def test_schedule_retry_and_get_status(simulator):
     assert status["events_count"] > 0
     assert status["simulated"] is True
     assert all(e["simulated"] is True for e in status["events"])
+
+
+def test_refund_and_cancel_lifecycle(simulator):
+    # Test SUCCESS -> REFUNDED
+    p_success = simulator.create_payment(amount=5000.0, failure_code=None)
+    # Ensure payment is SUCCESS (re-attempt if random roll wasn't success)
+    if p_success["status"] != "SUCCESS":
+        p_success = simulator.switch_payment_method(p_success["transaction_id"], "NETBANKING")
+
+    refunded = simulator.refund_payment(p_success["transaction_id"], reason="Customer dispute")
+    assert refunded["status"] == "REFUNDED"
+    assert refunded["simulated"] is True
+
+    # Attempting to transition from terminal REFUNDED state must fail
+    with pytest.raises(InvalidStateTransitionError, match="Invalid state transition"):
+        simulator._transition(refunded, PaymentState.PROCESSING)
+
+    # Test FAILED -> CANCELLED
+    p_fail = simulator.create_payment(amount=2000.0, failure_code="GATEWAY_TIMEOUT")
+    assert p_fail["status"] == "FAILED"
+    cancelled = simulator.cancel_payment(p_fail["transaction_id"], reason="Customer gave up")
+    assert cancelled["status"] == "CANCELLED"
+    assert cancelled["simulated"] is True
+
+    # Terminal CANCELLED state cannot transition
+    with pytest.raises(InvalidStateTransitionError, match="Invalid state transition"):
+        simulator._transition(cancelled, PaymentState.INITIATED)
+
+
+def test_all_actions_create_audited_events_with_simulated_tag(simulator):
+    payment = simulator.create_payment(amount=3200.0, failure_code="GATEWAY_TIMEOUT")
+    txn_id = payment["transaction_id"]
+
+    # Action 1: Retry
+    simulator.retry_payment(txn_id)
+
+    # Action 2: Schedule Retry
+    simulator.schedule_retry(txn_id, delay_seconds=60)
+
+    # Action 3: Message
+    simulator.send_recovery_message(txn_id, channel="SMS")
+
+    # Fetch status and events
+    status = simulator.get_payment_status(txn_id)
+    events = status["events"]
+
+    assert len(events) >= 5
+    for evt in events:
+        assert evt["simulated"] is True
+        assert evt["environment"] == "SIMULATED_GATEWAY_SANDBOX"
+        assert evt["transaction_id"] == txn_id
+        assert evt["timestamp"] is not None
+        assert evt["event_id"].startswith("evt_")
+

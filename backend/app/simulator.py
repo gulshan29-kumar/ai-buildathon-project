@@ -392,6 +392,23 @@ class StatefulPaymentSimulator:
             "environment": "SIMULATED_GATEWAY_SANDBOX",
         }
 
+    def refund_payment(self, transaction_id: str, reason: str = "Customer requested refund") -> Dict[str, Any]:
+        """Simulates refunding a previously successful payment."""
+        payment = self.payments.get(transaction_id)
+        if not payment:
+            raise KeyError(f"Transaction '{transaction_id}' not found in simulator.")
+        self._transition(payment, PaymentState.REFUNDED, reason=reason)
+        return dict(payment)
+
+    def cancel_payment(self, transaction_id: str, reason: str = "Payment session cancelled") -> Dict[str, Any]:
+        """Simulates cancelling a payment."""
+        payment = self.payments.get(transaction_id)
+        if not payment:
+            raise KeyError(f"Transaction '{transaction_id}' not found in simulator.")
+        self._transition(payment, PaymentState.CANCELLED, reason=reason)
+        return dict(payment)
+
 
 PaymentSimulator = StatefulPaymentSimulator
+
 
