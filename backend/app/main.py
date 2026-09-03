@@ -13,6 +13,7 @@ from backend.app.decision_engine import DecisionEngine
 from backend.app.failure_classifier import FailureClassifier
 from backend.app.orchestrator import AgentTools, RecoveryOrchestrator
 from backend.app.policy_engine import PolicyEngine
+from backend.app.root_cause_agent import RootCauseAgent
 from backend.app.simulator import PaymentSimulator, PolicyBlockedExecutionError
 
 
@@ -31,6 +32,8 @@ simulator = PaymentSimulator()
 policy_engine = PolicyEngine()
 agent_tools = AgentTools(simulator=simulator, policy_engine=policy_engine)
 orchestrator = RecoveryOrchestrator(tools=agent_tools)
+root_cause_agent = RootCauseAgent()
+
 
 
 
@@ -159,5 +162,22 @@ def list_policies() -> Dict[str, Any]:
 def orchestrate_recovery(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Agentic recovery orchestrator endpoint executing LangGraph recovery workflow."""
     return orchestrator.run(payload)
+
+
+@app.post("/api/analyze/root-cause")
+def analyze_root_cause(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Root Cause Analysis Agent endpoint with deterministic classification and Pydantic validation."""
+    txn = payload.get("transaction", {})
+    code = payload.get("failure_code", "")
+    cust = payload.get("customer_context", {})
+    pay_ctx = payload.get("payment_context", {})
+    res = root_cause_agent.analyze(
+        transaction=txn,
+        failure_code=code,
+        customer_context=cust,
+        payment_context=pay_ctx,
+    )
+    return res.to_dict()
+
 
 

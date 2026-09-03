@@ -112,4 +112,24 @@ def test_api_orchestrate_endpoint():
     assert "execution_result" in data
 
 
+def test_api_analyze_root_cause_endpoint():
+    payload = {
+        "transaction": {
+            "transaction_id": "txn_rca_api_1",
+            "amount": 4200.0,
+            "payment_method": "CARD",
+        },
+        "failure_code": "CARD_EXPIRED",
+    }
+    response = client.post("/api/analyze/root-cause", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["category"] == "PAYMENT_METHOD"
+    assert data["temporary"] is False
+    assert data["recoverability"] in {"LOW", "NONE"}
+    assert "explanation" in data
+    assert "confidence" in data
+
+
+
 
