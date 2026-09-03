@@ -130,3 +130,79 @@ def test_unsupported_action_raises():
     txn = {"amount": 1000.0}
     with pytest.raises(ValueError, match="Unsupported action"):
         estimate_action_recovery(txn, "INVALID_ACTION")
+
+
+def test_predict_action_recovery_alias_equivalence():
+    txn = {
+        "amount": 2500.0,
+        "failure_code": "GATEWAY_TIMEOUT",
+        "risk_score": 0.05,
+    }
+    from backend.app.action_predictor import (
+        predict_action_recovery,
+        predict_all_action_recoveries,
+    )
+
+    single1 = estimate_action_recovery(txn, "RETRY_PAYMENT")
+    single2 = predict_action_recovery(txn, "RETRY_PAYMENT")
+    assert single1 == single2
+
+    all1 = evaluate_all_actions(txn)
+    all2 = predict_all_action_recoveries(txn)
+    assert all1 == all2
+
+
+def test_amount_edge_cases_handling():
+    # String amount
+    txn_str = {"amount": "4500.50", "failure_code": "GATEWAY_TIMEOUT"}
+    res = estimate_action_recovery(txn_str, "RETRY_PAYMENT")
+    assert res["expected_recovery_value"] == round(4500.50 * res["probability"], 2)
+
+    # Zero amount
+    txn_zero = {"amount": 0.0, "failure_code": "GATEWAY_TIMEOUT"}
+    res_zero = estimate_action_recovery(txn_zero, "RETRY_PAYMENT")
+    assert res_zero["expected_recovery_value"] == 0.0
+
+    # Negative amount clamped
+    txn_neg = {"amount": -500.0, "failure_code": "GATEWAY_TIMEOUT"}
+    res_neg = estimate_action_recovery(txn_neg, "RETRY_PAYMENT")
+    assert res_neg["expected_recovery_value"] == 0.0
+
+    # Missing amount defaults to 0.0
+    txn_none = {"failure_code": "GATEWAY_TIMEOUT"}
+    res_none = estimate_action_recovery(txn_none, "RETRY_PAYMENT")
+    assert res_none["expected_recovery_value"] == 0.0
+
+
+def test_custom_synthetic_simulator_benchmarks_injection():
+    from backend.app.action_predictor import ActionRecoveryPredictor
+
+    custom_benchmarks = {
+        "GATEWAY_TIMEOUT": {
+            "RETRY_PAYMENT": 0.90,
+            "SCHEDULE_RETRY": 0.70,
+            "SWITCH_PAYMENT_METHOD": 0.40,
+            "SEND_RECOVERY_MESSAGE": 0.30,
+            "ESCALATE": 0.10,
+            "STOP": 0.00,
+        }
+    }
+    custom_predictor = ActionRecoveryPredictor(synthetic_benchmarks=custom_benchmarks)
+    txn = {"amount": 1000.0, "failure_code": "GATEWAY_TIMEOUT", "risk_score": 0.0, "customer_success_rate": 0.70}
+    res = custom_predictor.evaluate_action(txn, "RETRY_PAYMENT")
+    assert res["probability"] == 0.90
+    assert res["expected_recovery_value"] == 900.0
+
+
+def test_deterministic_predictions():
+    """Ensure that identical input transactions produce strictly identical, deterministic results."""
+    txn = {
+        "amount": 7800.0,
+        "failure_code": "BANK_UNAVAILABLE",
+        "risk_score": 0.12,
+        "attempt_number": 1,
+    }
+    run1 = evaluate_all_actions(txn)
+    run2 = evaluate_all_actions(txn)
+    assert run1 == run2
+

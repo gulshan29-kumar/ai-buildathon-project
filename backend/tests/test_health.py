@@ -57,3 +57,41 @@ def test_api_decide_endpoint():
     assert data["expected_recovery_value"] > 0
     assert len(data["candidates"]) == 6
 
+
+def test_api_predict_actions_endpoint():
+    payload = {
+        "transaction": {
+            "transaction_id": "txn_pred_1",
+            "amount": 5000.0,
+            "failure_code": "GATEWAY_TIMEOUT",
+            "risk_score": 0.05,
+        }
+    }
+    response = client.post("/api/predict/actions", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["transaction_id"] == "txn_pred_1"
+    assert data["amount"] == 5000.0
+    assert len(data["predictions"]) == 6
+    action_dict = {p["action"]: p for p in data["predictions"]}
+    assert "RETRY_PAYMENT" in action_dict
+    assert action_dict["RETRY_PAYMENT"]["probability"] >= 0.75
+    assert action_dict["RETRY_PAYMENT"]["expected_recovery_value"] == round(5000.0 * action_dict["RETRY_PAYMENT"]["probability"], 2)
+
+
+def test_api_predict_single_action_endpoint():
+    payload = {
+        "transaction": {
+            "amount": 3000.0,
+            "failure_code": "CARD_EXPIRED",
+        },
+        "action": "SWITCH_PAYMENT_METHOD",
+    }
+    response = client.post("/api/predict/action", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["action"] == "SWITCH_PAYMENT_METHOD"
+    assert data["probability"] >= 0.70
+    assert data["expected_recovery_value"] == round(3000.0 * data["probability"], 2)
+
+

@@ -4,11 +4,16 @@ from typing import Any, Dict
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.action_predictor import (
+    predict_action_recovery,
+    predict_all_action_recoveries,
+)
 from backend.app.config import settings
 from backend.app.decision_engine import DecisionEngine
 from backend.app.failure_classifier import FailureClassifier
 from backend.app.policy_engine import PolicyEngine
 from backend.app.simulator import PaymentSimulator, PolicyBlockedExecutionError
+
 
 app = FastAPI(title=settings.APP_NAME, version="0.1.0")
 
@@ -46,8 +51,31 @@ def classify_failure(payload: Dict[str, Any]) -> Dict[str, Any]:
     return res.to_dict()
 
 
+@app.post("/api/predict/actions")
+def predict_actions(payload: Dict[str, Any]) -> Dict[str, Any]:
+    txn = payload.get("transaction", payload)
+    predictions = predict_all_action_recoveries(txn)
+    try:
+        amt = float(txn.get("amount", 0.0))
+    except (ValueError, TypeError):
+        amt = 0.0
+    return {
+        "transaction_id": txn.get("transaction_id") or txn.get("id"),
+        "amount": amt,
+        "predictions": predictions,
+    }
+
+
+@app.post("/api/predict/action")
+def predict_single_action(payload: Dict[str, Any]) -> Dict[str, Any]:
+    txn = payload.get("transaction", payload)
+    action = payload.get("action", "RETRY_PAYMENT")
+    return predict_action_recovery(txn, action)
+
+
 @app.post("/api/decide")
 def evaluate_decision(payload: Dict[str, Any]) -> Dict[str, Any]:
+
     decision = decision_engine.decide(
         transaction=payload.get("transaction"),
         customer_context=payload.get("customer_context"),
