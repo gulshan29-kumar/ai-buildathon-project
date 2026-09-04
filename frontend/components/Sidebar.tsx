@@ -13,6 +13,7 @@ import {
   Cpu,
   Lock,
   Zap,
+  RefreshCw,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -28,6 +29,13 @@ const NAV_ITEMS = [
     href: '/transactions',
     icon: ArrowLeftRight,
     description: 'Failed payments & checkout monitoring',
+  },
+  {
+    label: 'Subscriptions',
+    href: '/subscriptions',
+    icon: RefreshCw,
+    badge: 'Phase 18',
+    description: 'Recurring billing recovery & churn mitigation',
   },
   {
     label: 'Run Recovery',

@@ -267,6 +267,83 @@ export interface CheckoutRecoveryResponse {
   session: CheckoutSession;
 }
 
+export interface SubscriptionCustomerHistory {
+  customer_id: string;
+  tenure_months: number;
+  consecutive_successful_renewals: number;
+  total_lifetime_value: number;
+  past_failure_count: number;
+  has_backup_payment_method: boolean;
+  dnd_enabled: boolean;
+  risk_score: number;
+  customer_tier: string;
+  notes?: string;
+}
+
+export interface SubscriptionEvent {
+  event_id: string;
+  subscription_id: string;
+  state: string;
+  action?: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+  audit_hash?: string;
+}
+
+export interface Subscription {
+  subscription_id: string;
+  customer_id: string;
+  plan_id: string;
+  plan_name: string;
+  billing_cycle: string;
+  renewal_amount: number;
+  current_state: string;
+  primary_method: string;
+  backup_method?: string;
+  next_billing_at: string;
+  last_payment_attempt_at?: string;
+  last_failure_code?: string;
+  current_attempt_count: number;
+  max_retry_attempts: number;
+  recovery_action?: string;
+  recovery_probability?: number;
+  expected_recovery_value?: number;
+  policy_outcome?: string;
+  policy_rule_id?: string;
+  recovered: boolean;
+  audit_hash?: string;
+  customer_history: SubscriptionCustomerHistory;
+  events: SubscriptionEvent[];
+}
+
+export interface SubscriptionRecoveryResponse {
+  subscription_id: string;
+  customer_id?: string;
+  plan_name?: string;
+  renewal_amount: number;
+  failure_code: string;
+  selected_action: string;
+  recovery_probability: number;
+  expected_recovery_value: number;
+  policy_outcome: string;
+  policy_rule_id: string;
+  candidates: Array<{
+    action: string;
+    probability: number;
+    expected_recovery_value: number;
+    permitted: boolean;
+    policy_outcome: string;
+    rule_id: string;
+    reason?: string;
+  }>;
+  execution: Record<string, any>;
+  recovered: boolean;
+  current_state?: string;
+  new_state?: string;
+  audit_hash?: string;
+  subscription: Subscription;
+}
+
 // HTTP request helper
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
@@ -491,19 +568,79 @@ export function formatPercent(rate: number | undefined | null): string {
   return `${val.toFixed(1)}%`;
 }
 
+export async function getSubscriptions(params: { state?: string; limit?: number } = {}): Promise<{
+  subscriptions: Subscription[];
+  total: number;
+  count: number;
+  metrics: {
+    total_subscriptions: number;
+    active_subscriptions: number;
+    payment_failed_subscriptions: number;
+    retry_scheduled_subscriptions: number;
+    recovered_subscriptions: number;
+    cancelled_subscriptions: number;
+    mrr_at_risk: number;
+    mrr_recovered: number;
+  };
+}> {
+  const query = new URLSearchParams();
+  if (params.state) query.append('state', params.state);
+  if (params.limit) query.append('limit', String(params.limit));
+  const qs = query.toString() ? `?${query.toString()}` : '';
+  return request<any>(`/api/subscriptions${qs}`);
+}
+
+export async function getSubscription(id: string): Promise<Subscription> {
+  return request<Subscription>(`/api/subscriptions/${encodeURIComponent(id)}`);
+}
+
+export async function runSubscriptionRecovery(
+  id: string,
+  options: { failure_code?: string; force_action?: string } = {}
+): Promise<SubscriptionRecoveryResponse> {
+  return request<SubscriptionRecoveryResponse>(`/api/subscriptions/${encodeURIComponent(id)}/recover`, {
+    method: 'POST',
+    body: JSON.stringify(options),
+  });
+}
+
+export async function recordSubscriptionEvent(
+  id: string,
+  payload: { state: string; action?: string; metadata?: Record<string, any> }
+): Promise<{ subscription: Subscription; event: SubscriptionEvent }> {
+  return request<any>(`/api/subscriptions/${encodeURIComponent(id)}/events`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getStatusBadge(status: string): { bg: string; text: string; border: string } {
   const s = (status || '').toUpperCase();
   switch (s) {
+    case 'SUBSCRIPTION_RECOVERED':
     case 'SUCCESS':
     case 'RECOVERED':
       return { bg: 'bg-emerald-950/60', text: 'text-emerald-400', border: 'border-emerald-500/30' };
+    case 'PAYMENT_FAILED':
     case 'FAILED':
       return { bg: 'bg-rose-950/60', text: 'text-rose-400', border: 'border-rose-500/30' };
-    case 'ESCALATED':
-      return { bg: 'bg-amber-950/60', text: 'text-amber-400', border: 'border-amber-500/30' };
+    case 'SUBSCRIPTION_CANCELLED':
+    case 'CANCELLED':
+      return { bg: 'bg-red-950/60', text: 'text-red-400', border: 'border-red-500/30' };
+    case 'RETRY_SCHEDULED':
+    case 'SCHEDULED':
+      return { bg: 'bg-blue-950/60', text: 'text-blue-400', border: 'border-blue-500/30' };
+    case 'PAYMENT_METHOD_CHANGED':
+      return { bg: 'bg-teal-950/60', text: 'text-teal-400', border: 'border-teal-500/30' };
+    case 'SUBSCRIPTION_CREATED':
+    case 'CREATED':
+      return { bg: 'bg-slate-900/80', text: 'text-slate-300', border: 'border-slate-700' };
+    case 'PAYMENT_ATTEMPTED':
     case 'PROCESSING':
     case 'INITIATED':
       return { bg: 'bg-indigo-950/60', text: 'text-indigo-400', border: 'border-indigo-500/30' };
+    case 'ESCALATED':
+      return { bg: 'bg-amber-950/60', text: 'text-amber-400', border: 'border-amber-500/30' };
     case 'PENDING':
     case 'WAIT':
       return { bg: 'bg-purple-950/60', text: 'text-purple-400', border: 'border-purple-500/30' };
@@ -519,6 +656,9 @@ export function getActionBadge(action: string): { bg: string; text: string; bord
       return { bg: 'bg-indigo-950/50', text: 'text-indigo-300', border: 'border-indigo-500/30' };
     case 'SWITCH_PAYMENT_METHOD':
       return { bg: 'bg-cyan-950/50', text: 'text-cyan-300', border: 'border-cyan-500/30' };
+    case 'SCHEDULE_RETRY':
+      return { bg: 'bg-blue-950/50', text: 'text-blue-300', border: 'border-blue-500/30' };
+    case 'SEND_RECOVERY_MESSAGE':
     case 'SEND_RECOVERY_LINK':
     case 'SEND_NOTIFICATION':
       return { bg: 'bg-emerald-950/50', text: 'text-emerald-300', border: 'border-emerald-500/30' };

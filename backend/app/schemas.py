@@ -164,6 +164,50 @@ class CheckoutRecoveryResponse(BaseModel):
     session: Dict[str, Any]
 
 
+# Phase 18: Subscription Recovery Schemas
+class SubscriptionCreateRequest(BaseModel):
+    customer_id: str
+    merchant_id: Optional[str] = "merch_razor_01"
+    plan_name: str
+    renewal_amount: float = Field(gt=0, description="Recurring renewal amount in INR")
+    billing_cycle: Optional[str] = "MONTHLY"
+    primary_method: Optional[str] = "CARD"
+    backup_method: Optional[str] = "UPI_AUTOPAY"
+    tenure_months: Optional[int] = 1
+    consecutive_successful_renewals: Optional[int] = 0
+    risk_score: Optional[float] = 0.03
+    dnd_enabled: Optional[bool] = False
+
+
+class SubscriptionEventRequest(BaseModel):
+    state: str = Field(description="New subscription lifecycle state")
+    action: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
+
+class SubscriptionRecoveryRequest(BaseModel):
+    failure_code: Optional[str] = Field(default=None, description="Diagnostic failure code e.g. CARD_EXPIRED, INSUFFICIENT_FUNDS")
+    force_action: Optional[str] = Field(default=None, description="Optional action override e.g. RETRY_PAYMENT, SWITCH_PAYMENT_METHOD")
+
+
+class SubscriptionRecoveryResponse(BaseModel):
+    subscription_id: str
+    plan_name: str
+    renewal_amount: float
+    failure_code: str
+    selected_action: str
+    recovery_probability: float
+    expected_recovery_value: float
+    policy_outcome: str
+    policy_rule_id: str
+    candidates: List[Dict[str, Any]]
+    execution: Dict[str, Any]
+    recovered: bool
+    current_state: str
+    audit_hash: Optional[str] = None
+    subscription: Dict[str, Any]
+
+
 class SimulationRunRequest(BaseModel):
     transaction_count: int = Field(default=50, ge=1, le=1000, description="Number of transactions to simulate")
     seed: int = Field(default=42, description="Random seed for deterministic reproduction")

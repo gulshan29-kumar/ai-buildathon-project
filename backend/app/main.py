@@ -46,10 +46,21 @@ from backend.app.schemas import (
     RecoveryRunResponse,
     SimulationRunRequest,
     SimulationRunResponse,
+    SubscriptionCreateRequest,
+    SubscriptionEventRequest,
+    SubscriptionRecoveryRequest,
+    SubscriptionRecoveryResponse,
     TransactionListResponse,
 )
 from backend.app.simulation_engine import SimulationEngine
 from backend.app.simulator import PaymentSimulator, PolicyBlockedExecutionError
+from backend.app.subscription_recovery import (
+    SubscriptionAction,
+    SubscriptionLifecycleState,
+    SubscriptionRecoveryAgent,
+    SubscriptionState,
+    SubscriptionStore,
+)
 
 # Configure structured application logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -1021,4 +1032,113 @@ def recover_abandoned_checkout(session_id: str, req: Optional[CheckoutRecoveryRe
 
     force_action = req.force_action if req else None
     result = store.agent.run_pipeline(session, force_action=force_action)
+    return result
+
+
+# -------------------------------------------------------------------------
+# Phase 18: Subscription Payment Recovery Endpoints
+# -------------------------------------------------------------------------
+
+@app.get("/api/subscriptions")
+def list_subscriptions(
+    status: Optional[str] = Query(None, description="Filter by lifecycle state"),
+    customer_id: Optional[str] = Query(None, description="Filter by customer ID"),
+    limit: int = Query(50, ge=1, le=200),
+) -> Dict[str, Any]:
+    """Lists recurring subscriptions with customer history, failure diagnostics, and status."""
+    store = SubscriptionStore.get_instance()
+    all_subs = store.list_subscriptions(limit=500)
+    subs = store.list_subscriptions(status=status, customer_id=customer_id, limit=limit)
+    
+    total_subscriptions = len(all_subs)
+    active_subscriptions = sum(1 for s in all_subs if s.current_state in (
+        SubscriptionLifecycleState.SUBSCRIPTION_CREATED,
+        SubscriptionLifecycleState.PAYMENT_ATTEMPTED,
+        SubscriptionLifecycleState.RETRY_SCHEDULED,
+        SubscriptionLifecycleState.PAYMENT_METHOD_CHANGED,
+    ))
+    payment_failed_subscriptions = sum(1 for s in all_subs if s.current_state == SubscriptionLifecycleState.PAYMENT_FAILED)
+    retry_scheduled_subscriptions = sum(1 for s in all_subs if s.current_state == SubscriptionLifecycleState.RETRY_SCHEDULED)
+    recovered_subscriptions = sum(1 for s in all_subs if s.current_state == SubscriptionLifecycleState.SUBSCRIPTION_RECOVERED or s.recovered)
+    cancelled_subscriptions = sum(1 for s in all_subs if s.current_state == SubscriptionLifecycleState.SUBSCRIPTION_CANCELLED)
+    mrr_at_risk = round(sum(s.renewal_amount for s in all_subs if s.current_state in (SubscriptionLifecycleState.PAYMENT_FAILED, SubscriptionLifecycleState.RETRY_SCHEDULED)), 2)
+    mrr_recovered = round(sum(s.renewal_amount for s in all_subs if s.current_state == SubscriptionLifecycleState.SUBSCRIPTION_RECOVERED or s.recovered), 2)
+
+    return {
+        "total": len(subs),
+        "subscriptions": [s.to_dict() for s in subs],
+        "metrics": {
+            "total_subscriptions": total_subscriptions,
+            "active_subscriptions": active_subscriptions,
+            "payment_failed_subscriptions": payment_failed_subscriptions,
+            "retry_scheduled_subscriptions": retry_scheduled_subscriptions,
+            "recovered_subscriptions": recovered_subscriptions,
+            "cancelled_subscriptions": cancelled_subscriptions,
+            "mrr_at_risk": mrr_at_risk,
+            "mrr_recovered": mrr_recovered,
+        },
+    }
+
+
+@app.get("/api/subscriptions/{subscription_id}")
+def get_subscription(subscription_id: str) -> Dict[str, Any]:
+    """Retrieves full details, customer history, event timeline, and audit trace of a subscription."""
+    store = SubscriptionStore.get_instance()
+    sub = store.get_subscription(subscription_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail=f"Subscription '{subscription_id}' not found.")
+    return {
+        "subscription": sub.to_dict(),
+        "customer_history": sub.customer_history.to_dict(),
+        "events": [e.to_dict() for e in sub.events],
+    }
+
+
+@app.post("/api/subscriptions")
+def create_subscription(req: SubscriptionCreateRequest) -> Dict[str, Any]:
+    """Creates a new recurring subscription with customer tenure and payment rails."""
+    store = SubscriptionStore.get_instance()
+    sub = store.create_subscription(
+        customer_id=req.customer_id,
+        merchant_id=req.merchant_id or "merch_razor_01",
+        plan_name=req.plan_name,
+        renewal_amount=req.renewal_amount,
+        billing_cycle=req.billing_cycle or "MONTHLY",
+        primary_method=req.primary_method or "CARD",
+        backup_method=req.backup_method,
+        tenure_months=req.tenure_months or 1,
+        consecutive_successful_renewals=req.consecutive_successful_renewals or 0,
+        risk_score=req.risk_score if req.risk_score is not None else 0.03,
+        dnd_enabled=req.dnd_enabled or False,
+    )
+    return sub.to_dict()
+
+
+@app.post("/api/subscriptions/{subscription_id}/events")
+def record_subscription_event(subscription_id: str, req: SubscriptionEventRequest) -> Dict[str, Any]:
+    """Records a subscription lifecycle event (e.g. PAYMENT_ATTEMPTED, PAYMENT_METHOD_CHANGED)."""
+    store = SubscriptionStore.get_instance()
+    try:
+        state_enum = SubscriptionLifecycleState(req.state.upper())
+    except (ValueError, KeyError):
+        raise HTTPException(status_code=400, detail=f"Invalid subscription lifecycle state '{req.state}'.")
+
+    try:
+        sub = store.record_event(subscription_id, state_enum, action=req.action, metadata=req.metadata)
+        return sub.to_dict()
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/subscriptions/{subscription_id}/recover")
+def recover_subscription_payment(subscription_id: str, req: Optional[SubscriptionRecoveryRequest] = None) -> Dict[str, Any]:
+    """Executes the complete autonomous recovery pipeline on a failed subscription renewal."""
+    store = SubscriptionStore.get_instance()
+    sub = store.get_subscription(subscription_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail=f"Subscription '{subscription_id}' not found.")
+
+    fcode = req.failure_code if req and req.failure_code else None
+    force_action = req.force_action if req and req.force_action else None
+    result = store.agent.run_pipeline(sub, failure_code=fcode, force_action=force_action)
     return result
