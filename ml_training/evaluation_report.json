@@ -1,6 +1,53 @@
 {
   "model_version": "1.0.0-xgb",
+  "model_name": "XGBoost Calibrated Recovery Classifier",
   "trained_at": "2026-09-02T22:08:56.732302",
+  "evaluated_at": "2026-09-04T21:04:44.446227",
+  "dataset_metadata": {
+    "total_dataset_transactions": 100000,
+    "recovery_cohort_size": 23450,
+    "train_samples": 14070,
+    "val_samples": 4690,
+    "test_samples": 4690,
+    "raw_features_count": 15,
+    "encoded_features_count": 45,
+    "all_input_features": [
+      "payment_method",
+      "gateway",
+      "failure_category",
+      "failure_code",
+      "preferred_payment_method",
+      "device_type",
+      "amount",
+      "attempt_number",
+      "customer_transaction_count",
+      "customer_success_rate",
+      "customer_average_transaction",
+      "risk_score",
+      "checkout_duration",
+      "hour",
+      "historical_failure_count"
+    ],
+    "categorical_features": [
+      "payment_method",
+      "gateway",
+      "failure_category",
+      "failure_code",
+      "preferred_payment_method",
+      "device_type"
+    ],
+    "numerical_features": [
+      "amount",
+      "attempt_number",
+      "customer_transaction_count",
+      "customer_success_rate",
+      "customer_average_transaction",
+      "risk_score",
+      "checkout_duration",
+      "hour",
+      "historical_failure_count"
+    ]
+  },
   "evaluation_summary": {
     "total_test_samples": 4690,
     "recovered_samples": 2270,
@@ -83,6 +130,147 @@
         }
       ]
     }
+  },
+  "feature_importance": {
+    "grouped_features": [
+      {
+        "feature": "failure_code",
+        "importance": 0.5498,
+        "raw_importance": 0.5499
+      },
+      {
+        "feature": "failure_category",
+        "importance": 0.3967,
+        "raw_importance": 0.3967
+      },
+      {
+        "feature": "gateway",
+        "importance": 0.0365,
+        "raw_importance": 0.0365
+      },
+      {
+        "feature": "payment_method",
+        "importance": 0.0063,
+        "raw_importance": 0.0063
+      },
+      {
+        "feature": "device_type",
+        "importance": 0.0023,
+        "raw_importance": 0.0023
+      },
+      {
+        "feature": "historical_failure_count",
+        "importance": 0.002,
+        "raw_importance": 0.002
+      },
+      {
+        "feature": "customer_transaction_count",
+        "importance": 0.0016,
+        "raw_importance": 0.0016
+      },
+      {
+        "feature": "amount",
+        "importance": 0.0008,
+        "raw_importance": 0.0008
+      },
+      {
+        "feature": "customer_success_rate",
+        "importance": 0.0008,
+        "raw_importance": 0.0008
+      },
+      {
+        "feature": "customer_average_transaction",
+        "importance": 0.0008,
+        "raw_importance": 0.0008
+      },
+      {
+        "feature": "risk_score",
+        "importance": 0.0008,
+        "raw_importance": 0.0008
+      },
+      {
+        "feature": "checkout_duration",
+        "importance": 0.0008,
+        "raw_importance": 0.0008
+      },
+      {
+        "feature": "hour",
+        "importance": 0.0008,
+        "raw_importance": 0.0008
+      },
+      {
+        "feature": "preferred_payment_method",
+        "importance": 0.0,
+        "raw_importance": 0.0
+      },
+      {
+        "feature": "attempt_number",
+        "importance": 0.0,
+        "raw_importance": 0.0
+      }
+    ],
+    "top_encoded_features": [
+      {
+        "feature": "failure_code_GATEWAY_TIMEOUT",
+        "importance": 0.4009
+      },
+      {
+        "feature": "failure_category_TEMPORARY",
+        "importance": 0.2036
+      },
+      {
+        "feature": "failure_category_AUTHENTICATION",
+        "importance": 0.1385
+      },
+      {
+        "feature": "failure_code_OTP_FAILURE",
+        "importance": 0.1097
+      },
+      {
+        "feature": "gateway_GATEWAY_B",
+        "importance": 0.0217
+      },
+      {
+        "feature": "failure_category_MERCHANT",
+        "importance": 0.0161
+      },
+      {
+        "feature": "failure_category_BANK",
+        "importance": 0.0106
+      },
+      {
+        "feature": "failure_category_CUSTOMER",
+        "importance": 0.0104
+      },
+      {
+        "feature": "failure_code_ORDER_CREATION_FAILED",
+        "importance": 0.0084
+      },
+      {
+        "feature": "gateway_GATEWAY_A",
+        "importance": 0.0081
+      },
+      {
+        "feature": "failure_code_AUTH_TIMEOUT",
+        "importance": 0.008
+      },
+      {
+        "feature": "gateway_GATEWAY_C",
+        "importance": 0.0067
+      },
+      {
+        "feature": "failure_code_CUSTOMER_ABANDONED",
+        "importance": 0.0067
+      },
+      {
+        "feature": "failure_category_PAYMENT_METHOD",
+        "importance": 0.005
+      },
+      {
+        "feature": "failure_category_ABANDONMENT",
+        "importance": 0.0049
+      }
+    ]
   },
   "per_category_metrics": {
     "ABANDONMENT": {

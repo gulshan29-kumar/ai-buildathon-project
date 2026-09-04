@@ -678,32 +678,54 @@ def list_all_audit_events(
 
 @app.get("/api/model/performance")
 def get_model_performance() -> Dict[str, Any]:
-    """Retrieves real ML model training evaluation metrics, confusion matrix, and calibration curve."""
+    """Retrieves empirical ML model evaluation metrics, dataset sizes, feature importance, and experiment history."""
     report_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml_training", "evaluation_report.json")
+    report: Dict[str, Any] = {}
     if os.path.exists(report_path):
         try:
             with open(report_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                report = json.load(f)
         except Exception as e:
             logger.warning(f"Could not load evaluation_report.json: {e}")
 
-    # Fallback to authentic verified metrics
-    return {
-        "model_version": "1.0.0-xgb",
-        "trained_at": "2026-09-02T22:08:56",
-        "evaluation_summary": {
-            "total_test_samples": 4690,
-            "recovered_samples": 2270,
-            "overall_metrics": {
-                "roc_auc": 0.9727,
-                "pr_auc": 0.9667,
-                "precision": 0.8882,
-                "recall": 0.948,
-                "f1": 0.9171,
-                "brier_score": 0.0585,
-            },
-        },
-    }
+    if not report:
+        try:
+            from ml_training.evaluate import evaluate_model
+            report = evaluate_model()
+        except Exception as e:
+            logger.warning(f"Could not evaluate model dynamically: {e}")
+
+    # Attach recent experiment history if available
+    try:
+        from ml_training.experiment_tracker import ExperimentTracker
+        tracker = ExperimentTracker()
+        report["experiments"] = tracker.load_experiments()[-5:]
+    except Exception:
+        report["experiments"] = []
+
+    return report
+
+
+@app.post("/api/model/evaluate")
+def run_model_evaluation() -> Dict[str, Any]:
+    """Triggers the reproducible model evaluation script on held-out test data and logs an experiment run."""
+    try:
+        from ml_training.evaluate import evaluate_model
+        report = evaluate_model()
+        try:
+            from ml_training.experiment_tracker import ExperimentTracker
+            tracker = ExperimentTracker()
+            report["experiments"] = tracker.load_experiments()[-5:]
+        except Exception:
+            report["experiments"] = []
+        return {
+            "status": "SUCCESS",
+            "message": "Model evaluation executed successfully on held-out test data.",
+            "report": report,
+        }
+    except Exception as e:
+        logger.error(f"Error during model evaluation: {e}")
+        raise HTTPException(status_code=500, detail=f"Model evaluation failed: {str(e)}")
 
 
 # --- Simulation Endpoints ---

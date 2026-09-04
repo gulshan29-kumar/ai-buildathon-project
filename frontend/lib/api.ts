@@ -498,8 +498,92 @@ export async function detectCheckoutAbandonments(): Promise<{ detected_count: nu
   });
 }
 
-export async function getModelPerformance(): Promise<any> {
-  return request<any>('/api/model/performance');
+export interface FeatureImportanceItem {
+  feature: string;
+  importance: number;
+  raw_importance?: number;
+}
+
+export interface ModelPerformanceReport {
+  model_version: string;
+  model_name?: string;
+  trained_at: string;
+  evaluated_at?: string;
+  dataset_metadata?: {
+    total_dataset_transactions: number;
+    recovery_cohort_size: number;
+    train_samples: number;
+    val_samples: number;
+    test_samples: number;
+    raw_features_count: number;
+    encoded_features_count: number;
+    all_input_features: string[];
+    categorical_features: string[];
+    numerical_features: string[];
+  };
+  evaluation_summary: {
+    total_test_samples: number;
+    recovered_samples: number;
+    overall_metrics: {
+      sample_count: number;
+      recovered_count: number;
+      recovery_rate: number;
+      roc_auc: number | null;
+      pr_auc: number | null;
+      precision: number;
+      recall: number;
+      f1: number;
+      brier_score: number;
+      confusion_matrix: {
+        true_negatives: number;
+        false_positives: number;
+        false_negatives: number;
+        true_positives: number;
+        raw: number[][];
+      };
+      calibration_curve: Array<{
+        bin: number;
+        mean_pred: number;
+        actual_pos: number;
+      }>;
+    };
+  };
+  feature_importance?: {
+    grouped_features: FeatureImportanceItem[];
+    top_encoded_features: FeatureImportanceItem[];
+  };
+  per_category_metrics: Record<string, {
+    sample_count: number;
+    recovered_count: number;
+    recovery_rate: number;
+    roc_auc: number | null;
+    pr_auc: number | null;
+    precision: number;
+    recall: number;
+    f1: number;
+    brier_score: number;
+    confusion_matrix: {
+      true_negatives: number;
+      false_positives: number;
+      false_negatives: number;
+      true_positives: number;
+    };
+  }>;
+  experiments?: Array<any>;
+}
+
+export async function getModelPerformance(): Promise<ModelPerformanceReport> {
+  return request<ModelPerformanceReport>('/api/model/performance');
+}
+
+export async function runModelEvaluation(): Promise<{
+  status: string;
+  message: string;
+  report: ModelPerformanceReport;
+}> {
+  return request<any>('/api/model/evaluate', {
+    method: 'POST',
+  });
 }
 
 export async function orchestrateWorkflow(payload: any): Promise<any> {
