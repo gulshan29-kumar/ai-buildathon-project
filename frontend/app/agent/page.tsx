@@ -366,7 +366,7 @@ export default function AgentWorkflowPage() {
 
             <div className="bg-slate-950 border border-slate-900 rounded-lg p-3 font-mono text-[11px] h-64 overflow-y-auto space-y-2 text-slate-300">
               {logs.length === 0 ? (
-                <span className="text-slate-600">Ready. Click "Run Autonomous Workflow" to start.</span>
+                <span className="text-slate-600">Ready. Click &quot;Run Autonomous Workflow&quot; to start.</span>
               ) : (
                 logs.map((log, i) => (
                   <div key={i} className="flex items-start gap-2">

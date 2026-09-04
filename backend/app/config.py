@@ -9,7 +9,7 @@ class Settings(BaseModel):
     DATABASE_URL: str = Field(
         default_factory=lambda: os.getenv(
             "DATABASE_URL",
-            "postgresql+psycopg://postgres:postgres@localhost:5432/razorrecover",
+            "sqlite:///./razorrecover.db",
         )
     )
     FRONTEND_URL: str = Field(

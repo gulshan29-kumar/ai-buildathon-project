@@ -896,7 +896,7 @@ export default function DashboardPage() {
               {recentTxns.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-500">
-                    No transactions recorded in sandbox yet. Click "Reset Sandbox" to seed authentic data.
+                    No transactions recorded in sandbox yet. Click &quot;Reset Sandbox&quot; to seed authentic data.
                   </td>
                 </tr>
               ) : (
