@@ -572,6 +572,90 @@ export interface ModelPerformanceReport {
   experiments?: Array<any>;
 }
 
+export interface BenchmarkStrategyMetrics {
+  strategy: string;
+  title: string;
+  description: string;
+  layer: string;
+  safety_level: string;
+  revenue_recovered: number;
+  recovery_rate: number;
+  revenue_at_risk: number;
+  additional_revenue: number;
+  additional_revenue_vs_fixed_retry: number;
+  average_recovery_time_ms: number;
+  retry_count: number;
+  false_intervention_rate: number;
+  unnecessary_retry_rate: number;
+  escalation_rate: number;
+  blocked_unsafe_actions: number;
+  recovered_count: number;
+  total_transactions: number;
+}
+
+export interface BenchmarkTransactionTrace {
+  transaction_id: string;
+  amount: number;
+  failure_code: string;
+  payment_method: string;
+  risk_score: number;
+  ml_probability: number;
+  strategies: Record<string, {
+    action: string;
+    recovered: boolean;
+    recovered_amount: number;
+    execution_status: string;
+    retries: number;
+    blocked_unsafe: boolean;
+    escalated: boolean;
+  }>;
+}
+
+export interface BenchmarkRunResponse {
+  benchmark_id: string;
+  timestamp: string;
+  seed: number;
+  scenario: string;
+  total_transactions: number;
+  revenue_at_risk: number;
+  strategies: Record<string, BenchmarkStrategyMetrics>;
+  traces: BenchmarkTransactionTrace[];
+}
+
+export async function runBenchmark(params: {
+  transaction_count?: number;
+  seed?: number;
+  scenario?: string;
+  save_results?: boolean;
+} = {}): Promise<BenchmarkRunResponse> {
+  return request<BenchmarkRunResponse>('/api/benchmark/run', {
+    method: 'POST',
+    body: JSON.stringify({
+      transaction_count: params.transaction_count ?? 100,
+      seed: params.seed ?? 42,
+      scenario: params.scenario ?? 'mixed_failures',
+      save_results: params.save_results ?? true,
+    }),
+  });
+}
+
+export async function getLatestBenchmark(): Promise<BenchmarkRunResponse> {
+  return request<BenchmarkRunResponse>('/api/benchmark/latest');
+}
+
+export async function getBenchmarkHistory(): Promise<Array<{
+  benchmark_id: string;
+  timestamp: string;
+  seed: number;
+  total_transactions: number;
+  revenue_at_risk: number;
+  ai_recovery_rate: number;
+  ai_revenue_recovered: number;
+  fixed_retry_rate: number;
+}>> {
+  return request<any>('/api/benchmark/history');
+}
+
 export async function getModelPerformance(): Promise<ModelPerformanceReport> {
   return request<ModelPerformanceReport>('/api/model/performance');
 }

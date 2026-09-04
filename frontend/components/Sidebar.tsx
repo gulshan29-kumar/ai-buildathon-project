@@ -14,6 +14,7 @@ import {
   Lock,
   Zap,
   RefreshCw,
+  Scale,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -69,6 +70,13 @@ const NAV_ITEMS = [
     href: '/model-performance',
     icon: BarChart3,
     description: 'ML model ROC-AUC & calibration metrics',
+  },
+  {
+    label: 'Baseline Benchmark',
+    href: '/baseline-comparison',
+    icon: Scale,
+    badge: 'Phase 20',
+    description: '6-strategy empirical baseline comparison',
   },
 ];
 

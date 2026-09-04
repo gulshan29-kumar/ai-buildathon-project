@@ -35,6 +35,9 @@ from backend.app.policy_engine import PolicyEngine
 from backend.app.root_cause_agent import RootCauseAgent
 from backend.app.schemas import (
     AgentDecisionResponse,
+    BenchmarkRunRequest,
+    BenchmarkRunResponse,
+    BenchmarkStrategyMetrics,
     CheckoutEventRequest,
     CheckoutRecoveryRequest,
     CheckoutRecoveryResponse,
@@ -52,6 +55,7 @@ from backend.app.schemas import (
     SubscriptionRecoveryResponse,
     TransactionListResponse,
 )
+from backend.app.baseline_comparison import BaselineComparisonEngine
 from backend.app.simulation_engine import SimulationEngine
 from backend.app.simulator import PaymentSimulator, PolicyBlockedExecutionError
 from backend.app.subscription_recovery import (
@@ -799,6 +803,37 @@ def get_simulation_transaction(run_id: str, txn_id: str) -> Dict[str, Any]:
         status_code=404,
         detail=f"Transaction '{txn_id}' not found in simulation run '{run_id}'.",
     )
+
+
+# --- Baseline Benchmark Endpoints (Phase 20) ---
+
+@app.post("/api/benchmark/run", response_model=BenchmarkRunResponse)
+def run_benchmark(request: BenchmarkRunRequest) -> BenchmarkRunResponse:
+    """Executes empirical baseline comparison across all 6 recovery strategies on a fixed seed."""
+    engine = BaselineComparisonEngine(seed=request.seed)
+    result = engine.run_benchmark(
+        transaction_count=request.transaction_count,
+        scenario=request.scenario or "mixed_failures",
+        seed=request.seed,
+        save_results=request.save_results,
+    )
+    return BenchmarkRunResponse(**result)
+
+
+@app.get("/api/benchmark/latest", response_model=BenchmarkRunResponse)
+def get_latest_benchmark() -> BenchmarkRunResponse:
+    """Retrieves the most recent 6-strategy baseline comparison run."""
+    report = BaselineComparisonEngine.get_latest_benchmark()
+    if not report:
+        engine = BaselineComparisonEngine(seed=42)
+        report = engine.run_benchmark(transaction_count=100, seed=42)
+    return BenchmarkRunResponse(**report)
+
+
+@app.get("/api/benchmark/history")
+def list_benchmark_runs() -> List[Dict[str, Any]]:
+    """Lists historical benchmark experiment runs."""
+    return BaselineComparisonEngine.list_benchmarks()
 
 
 # --- Demo Environment Reset ---

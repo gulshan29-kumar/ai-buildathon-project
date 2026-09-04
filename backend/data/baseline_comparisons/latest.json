@@ -1,0 +1,1732 @@
+{
+  "benchmark_id": "bench_20260904_154512_e0dfe9",
+  "timestamp": "2026-09-04T15:45:12.992033+00:00",
+  "seed": 99,
+  "scenario": "mixed_failures",
+  "total_transactions": 25,
+  "revenue_at_risk": 397115.21,
+  "strategies": {
+    "NO_RECOVERY": {
+      "strategy": "NO_RECOVERY",
+      "title": "1. No Recovery",
+      "description": "Passive zero-intervention baseline. Every failed payment is abandoned.",
+      "layer": "Zero Intervention",
+      "safety_level": "None (Passive)",
+      "revenue_recovered": 0.0,
+      "recovery_rate": 0.0,
+      "revenue_at_risk": 397115.21,
+      "additional_revenue": 0.0,
+      "additional_revenue_vs_fixed_retry": -55831.0,
+      "average_recovery_time_ms": 0.0,
+      "retry_count": 0,
+      "false_intervention_rate": 0.0,
+      "unnecessary_retry_rate": 0.0,
+      "escalation_rate": 0.0,
+      "blocked_unsafe_actions": 0,
+      "recovered_count": 0,
+      "total_transactions": 25
+    },
+    "FIXED_RETRY_RULE": {
+      "strategy": "FIXED_RETRY_RULE",
+      "title": "2. Fixed Retry Rule",
+      "description": "Blind static heuristic: retries every failed transaction 1-2 times on same payment rail.",
+      "layer": "Static Rule Heuristic",
+      "safety_level": "None (Blind)",
+      "revenue_recovered": 55831.0,
+      "recovery_rate": 28.0,
+      "revenue_at_risk": 397115.21,
+      "additional_revenue": 55831.0,
+      "additional_revenue_vs_fixed_retry": 0.0,
+      "average_recovery_time_ms": 1850.0,
+      "retry_count": 25,
+      "false_intervention_rate": 72.0,
+      "unnecessary_retry_rate": 60.0,
+      "escalation_rate": 0.0,
+      "blocked_unsafe_actions": 0,
+      "recovered_count": 7,
+      "total_transactions": 25
+    },
+    "ML_ONLY": {
+      "strategy": "ML_ONLY",
+      "title": "3. ML-Only",
+      "description": "Supervised ML probability score with fixed threshold (>= 0.45). Binary retry vs stop.",
+      "layer": "Predictive Scoring",
+      "safety_level": "Unbounded (No Policy)",
+      "revenue_recovered": 55831.0,
+      "recovery_rate": 28.0,
+      "revenue_at_risk": 397115.21,
+      "additional_revenue": 55831.0,
+      "additional_revenue_vs_fixed_retry": 0.0,
+      "average_recovery_time_ms": 2750.0,
+      "retry_count": 25,
+      "false_intervention_rate": 72.0,
+      "unnecessary_retry_rate": 60.0,
+      "escalation_rate": 0.0,
+      "blocked_unsafe_actions": 0,
+      "recovered_count": 7,
+      "total_transactions": 25
+    },
+    "ML_DECISION_ENGINE": {
+      "strategy": "ML_DECISION_ENGINE",
+      "title": "4. ML + Decision Engine",
+      "description": "Multi-action evaluation ranking by Expected Recovery Value (Amount * P(action)).",
+      "layer": "Action Optimization",
+      "safety_level": "Unconstrained (EV Only)",
+      "revenue_recovered": 168472.44,
+      "recovery_rate": 56.0,
+      "revenue_at_risk": 397115.21,
+      "additional_revenue": 168472.44,
+      "additional_revenue_vs_fixed_retry": 112641.44,
+      "average_recovery_time_ms": 1952.0,
+      "retry_count": 10,
+      "false_intervention_rate": 40.0,
+      "unnecessary_retry_rate": 0.0,
+      "escalation_rate": 4.0,
+      "blocked_unsafe_actions": 0,
+      "recovered_count": 14,
+      "total_transactions": 25
+    },
+    "ML_AGENT": {
+      "strategy": "ML_AGENT",
+      "title": "5. ML + Agent",
+      "description": "Autonomous multi-stage agent with root cause taxonomy and contextual reasoning.",
+      "layer": "Autonomous Orchestration",
+      "safety_level": "Heuristic Agent Controls",
+      "revenue_recovered": 248323.88,
+      "recovery_rate": 76.0,
+      "revenue_at_risk": 397115.21,
+      "additional_revenue": 248323.88,
+      "additional_revenue_vs_fixed_retry": 192492.88,
+      "average_recovery_time_ms": 2836.0,
+      "retry_count": 7,
+      "false_intervention_rate": 20.0,
+      "unnecessary_retry_rate": 0.0,
+      "escalation_rate": 4.0,
+      "blocked_unsafe_actions": 0,
+      "recovered_count": 19,
+      "total_transactions": 25
+    },
+    "ML_AGENT_GUARDRAILS": {
+      "strategy": "ML_AGENT_GUARDRAILS",
+      "title": "6. ML + Agent + Guardrails",
+      "description": "Complete RazorRecover AI platform with 12 deterministic non-bypassable policy guardrails.",
+      "layer": "Full Enterprise Platform",
+      "safety_level": "Deterministic Guardrails (100%)",
+      "revenue_recovered": 177958.26,
+      "recovery_rate": 64.0,
+      "revenue_at_risk": 397115.21,
+      "additional_revenue": 177958.26,
+      "additional_revenue_vs_fixed_retry": 122127.26,
+      "average_recovery_time_ms": 2946.0,
+      "retry_count": 10,
+      "false_intervention_rate": 32.0,
+      "unnecessary_retry_rate": 0.0,
+      "escalation_rate": 4.0,
+      "blocked_unsafe_actions": 1,
+      "recovered_count": 16,
+      "total_transactions": 25
+    }
+  },
+  "traces": [
+    {
+      "transaction_id": "txn_bench_0001_7618",
+      "amount": 21461.04,
+      "failure_code": "CARD_DECLINED",
+      "payment_method": "UPI",
+      "risk_score": 0.1421,
+      "ml_probability": 0.9448,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": true,
+          "recovered_amount": 21461.04,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": true,
+          "recovered_amount": 21461.04,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": true,
+          "recovered_amount": 21461.04,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0002_4268",
+      "amount": 21926.7,
+      "failure_code": "CARD_DECLINED",
+      "payment_method": "NETBANKING",
+      "risk_score": 0.1367,
+      "ml_probability": 0.9618,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": true,
+          "recovered_amount": 21926.7,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 21926.7,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": true,
+          "recovered_amount": 21926.7,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0003_6551",
+      "amount": 13041.9,
+      "failure_code": "GATEWAY_TIMEOUT",
+      "payment_method": "UPI",
+      "risk_score": 0.0845,
+      "ml_probability": 0.9667,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 13041.9,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 13041.9,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 13041.9,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 13041.9,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 13041.9,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0004_9754",
+      "amount": 9576.46,
+      "failure_code": "GATEWAY_TIMEOUT",
+      "payment_method": "UPI",
+      "risk_score": 0.0318,
+      "ml_probability": 0.9626,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 9576.46,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 9576.46,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 9576.46,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 9576.46,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 9576.46,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0005_3910",
+      "amount": 71220.98,
+      "failure_code": "HIGH_RISK",
+      "payment_method": "UPI",
+      "risk_score": 0.8648,
+      "ml_probability": 0.9584,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "ESCALATE",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ESCALATED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": true
+        },
+        "ML_AGENT": {
+          "action": "ESCALATE",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ESCALATED_BY_AGENT",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": true
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "ESCALATE",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "BLOCKED_BY_GUARDRAILS",
+          "retries": 0,
+          "blocked_unsafe": true,
+          "escalated": true
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0006_3341",
+      "amount": 1391.58,
+      "failure_code": "CARD_DECLINED",
+      "payment_method": "CARD",
+      "risk_score": 0.1819,
+      "ml_probability": 0.9495,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0007_3070",
+      "amount": 24690.96,
+      "failure_code": "CARD_DECLINED",
+      "payment_method": "UPI",
+      "risk_score": 0.4189,
+      "ml_probability": 0.9607,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": true,
+          "recovered_amount": 24690.96,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": true,
+          "recovered_amount": 24690.96,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0008_3353",
+      "amount": 34699.91,
+      "failure_code": "CARD_DECLINED",
+      "payment_method": "NETBANKING",
+      "risk_score": 0.2139,
+      "ml_probability": 0.9626,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "NO_RESPONSE",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0009_6926",
+      "amount": 1766.82,
+      "failure_code": "GATEWAY_TIMEOUT",
+      "payment_method": "CARD",
+      "risk_score": 0.0416,
+      "ml_probability": 0.964,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 1766.82,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 1766.82,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 1766.82,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 1766.82,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 1766.82,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0010_7323",
+      "amount": 13739.01,
+      "failure_code": "CARD_DECLINED",
+      "payment_method": "NETBANKING",
+      "risk_score": 0.0871,
+      "ml_probability": 0.9615,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": true,
+          "recovered_amount": 13739.01,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 13739.01,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": true,
+          "recovered_amount": 13739.01,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0011_6089",
+      "amount": 12537.93,
+      "failure_code": "GATEWAY_TIMEOUT",
+      "payment_method": "CARD",
+      "risk_score": 0.0445,
+      "ml_probability": 0.9659,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 12537.93,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 12537.93,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 12537.93,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 12537.93,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 12537.93,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0012_8173",
+      "amount": 31878.82,
+      "failure_code": "CARD_DECLINED",
+      "payment_method": "UPI",
+      "risk_score": 0.0779,
+      "ml_probability": 0.9597,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0013_8060",
+      "amount": 7663.32,
+      "failure_code": "OTP_EXPIRED",
+      "payment_method": "CARD",
+      "risk_score": 0.0824,
+      "ml_probability": 0.961,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SCHEDULE_RETRY",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 7663.32,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0014_6658",
+      "amount": 6717.56,
+      "failure_code": "GATEWAY_TIMEOUT",
+      "payment_method": "NETBANKING",
+      "risk_score": 0.0425,
+      "ml_probability": 0.9663,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 6717.56,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 6717.56,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 6717.56,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 6717.56,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 6717.56,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0015_7688",
+      "amount": 6546.89,
+      "failure_code": "OTP_EXPIRED",
+      "payment_method": "UPI",
+      "risk_score": 0.054,
+      "ml_probability": 0.9599,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 6546.89,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SCHEDULE_RETRY",
+          "recovered": true,
+          "recovered_amount": 6546.89,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 6546.89,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0016_9374",
+      "amount": 16211.15,
+      "failure_code": "CUSTOMER_ABANDONED",
+      "payment_method": "CARD",
+      "risk_score": 0.1321,
+      "ml_probability": 0.9567,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 16211.15,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 16211.15,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 16211.15,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0017_2722",
+      "amount": 1822.5,
+      "failure_code": "OTP_EXPIRED",
+      "payment_method": "UPI",
+      "risk_score": 0.0135,
+      "ml_probability": 0.96,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SCHEDULE_RETRY",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0018_7528",
+      "amount": 10150.3,
+      "failure_code": "CUSTOMER_ABANDONED",
+      "payment_method": "NETBANKING",
+      "risk_score": 0.1816,
+      "ml_probability": 0.959,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "NO_RESPONSE",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "NO_RESPONSE",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "NO_RESPONSE",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0019_6895",
+      "amount": 10446.94,
+      "failure_code": "CARD_DECLINED",
+      "payment_method": "NETBANKING",
+      "risk_score": 0.2791,
+      "ml_probability": 0.9626,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 10446.94,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0020_9710",
+      "amount": 8547.76,
+      "failure_code": "GATEWAY_TIMEOUT",
+      "payment_method": "UPI",
+      "risk_score": 0.0117,
+      "ml_probability": 0.9671,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 8547.76,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 8547.76,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 8547.76,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 8547.76,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 8547.76,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0021_7781",
+      "amount": 5801.95,
+      "failure_code": "CARD_DECLINED",
+      "payment_method": "UPI",
+      "risk_score": 0.418,
+      "ml_probability": 0.9526,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SWITCH_PAYMENT_METHOD",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0022_1942",
+      "amount": 15318.84,
+      "failure_code": "CUSTOMER_ABANDONED",
+      "payment_method": "UPI",
+      "risk_score": 0.3721,
+      "ml_probability": 0.9544,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 15318.84,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 15318.84,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 15318.84,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0023_3844",
+      "amount": 23257.83,
+      "failure_code": "CUSTOMER_ABANDONED",
+      "payment_method": "UPI",
+      "risk_score": 0.3761,
+      "ml_probability": 0.9577,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 23257.83,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 23257.83,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 23257.83,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0024_1542",
+      "amount": 23055.49,
+      "failure_code": "CUSTOMER_ABANDONED",
+      "payment_method": "NETBANKING",
+      "risk_score": 0.1166,
+      "ml_probability": 0.9556,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "FAILED",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 23055.49,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 23055.49,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "SEND_RECOVERY_MESSAGE",
+          "recovered": true,
+          "recovered_amount": 23055.49,
+          "execution_status": "SUCCESS",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    },
+    {
+      "transaction_id": "txn_bench_0025_8145",
+      "amount": 3642.57,
+      "failure_code": "GATEWAY_TIMEOUT",
+      "payment_method": "UPI",
+      "risk_score": 0.0222,
+      "ml_probability": 0.9666,
+      "strategies": {
+        "NO_RECOVERY": {
+          "action": "STOP",
+          "recovered": false,
+          "recovered_amount": 0.0,
+          "execution_status": "ABANDONED",
+          "retries": 0,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "FIXED_RETRY_RULE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 3642.57,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_ONLY": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 3642.57,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_DECISION_ENGINE": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 3642.57,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 3642.57,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        },
+        "ML_AGENT_GUARDRAILS": {
+          "action": "RETRY_PAYMENT",
+          "recovered": true,
+          "recovered_amount": 3642.57,
+          "execution_status": "SUCCESS",
+          "retries": 1,
+          "blocked_unsafe": false,
+          "escalated": false
+        }
+      }
+    }
+  ]
+}

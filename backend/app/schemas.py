@@ -261,3 +261,43 @@ class HealthResponse(BaseModel):
     policy_engine: str
     simulator: str
 
+
+class BenchmarkRunRequest(BaseModel):
+    transaction_count: int = Field(default=100, ge=10, le=1000, description="Number of transactions to benchmark")
+    seed: int = Field(default=42, description="Random seed for fixed reproducible test dataset")
+    scenario: Optional[str] = Field(default="mixed_failures", description="Simulation scenario type")
+    save_results: bool = Field(default=True, description="Whether to persist benchmark run")
+
+
+class BenchmarkStrategyMetrics(BaseModel):
+    strategy: str
+    title: str
+    description: str
+    layer: str
+    safety_level: str
+    revenue_recovered: float
+    recovery_rate: float
+    revenue_at_risk: float
+    additional_revenue: float
+    additional_revenue_vs_fixed_retry: float
+    average_recovery_time_ms: float
+    retry_count: int
+    false_intervention_rate: float
+    unnecessary_retry_rate: float
+    escalation_rate: float
+    blocked_unsafe_actions: int
+    recovered_count: int
+    total_transactions: int
+
+
+class BenchmarkRunResponse(BaseModel):
+    benchmark_id: str
+    timestamp: str
+    seed: int
+    scenario: str
+    total_transactions: int
+    revenue_at_risk: float
+    strategies: Dict[str, BenchmarkStrategyMetrics]
+    traces: List[Dict[str, Any]] = []
+
+
