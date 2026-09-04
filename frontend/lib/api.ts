@@ -36,6 +36,9 @@ export interface DashboardMetrics {
     range: string;
     count: number;
   }>;
+  abandoned_checkout_revenue?: number;
+  recoverable_abandonment_revenue?: number;
+  recovered_abandonment_revenue?: number;
 }
 
 export interface Transaction {
@@ -209,6 +212,61 @@ export interface SimulationRunResponse {
   transactions: TransactionComparisonTrace[];
 }
 
+export interface CheckoutSession {
+  session_id: string;
+  customer_id: string;
+  cart_value: number;
+  current_stage: string;
+  created_at: string;
+  updated_at: string;
+  checkout_duration: number;
+  device: string;
+  payment_method: string;
+  previous_purchases: number;
+  previous_abandonment_count: number;
+  risk_score: number;
+  dnd_enabled: boolean;
+  customer_tier: string;
+  abandonment_detected: boolean;
+  abandonment_reason?: string;
+  abandonment_detected_at?: string;
+  dropoff_stage?: string;
+  recovery_action?: string;
+  recovery_probability?: number;
+  expected_recovery_value?: number;
+  policy_outcome?: string;
+  policy_rule_id?: string;
+  recovered: boolean;
+  recovered_amount: number;
+  audit_hash?: string;
+  events_count?: number;
+}
+
+export interface CheckoutRecoveryResponse {
+  session_id: string;
+  cart_value: number;
+  dropoff_stage?: string;
+  selected_action: string;
+  recovery_probability: number;
+  expected_recovery_value: number;
+  policy_outcome: string;
+  policy_rule_id: string;
+  candidates: Array<{
+    action: string;
+    probability: number;
+    expected_recovery_value: number;
+    permitted: boolean;
+    policy_outcome: string;
+    rule_id: string;
+    reason?: string;
+  }>;
+  execution: Record<string, any>;
+  recovered: boolean;
+  recovered_amount: number;
+  audit_hash?: string;
+  session: CheckoutSession;
+}
+
 // HTTP request helper
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
@@ -330,6 +388,37 @@ export async function getSimulationRuns(): Promise<any[]> {
 
 export async function getSimulationTransaction(runId: string, txnId: string): Promise<TransactionComparisonTrace> {
   return request<TransactionComparisonTrace>(`/api/simulation/${encodeURIComponent(runId)}/transaction/${encodeURIComponent(txnId)}`);
+}
+
+// Phase 17: Checkout Abandonment Client Methods
+export async function getCheckoutSessions(params: {
+  stage?: string;
+  abandoned_only?: boolean;
+  limit?: number;
+} = {}): Promise<{ total: number; sessions: CheckoutSession[]; metrics: Record<string, number> }> {
+  const query = new URLSearchParams();
+  if (params.stage) query.append('stage', params.stage);
+  if (params.abandoned_only) query.append('abandoned_only', 'true');
+  if (params.limit) query.append('limit', String(params.limit));
+  const qs = query.toString() ? `?${query.toString()}` : '';
+  return request<{ total: number; sessions: CheckoutSession[]; metrics: Record<string, number> }>(`/api/checkout/sessions${qs}`);
+}
+
+export async function getCheckoutSession(id: string): Promise<{ session: CheckoutSession; events: any[] }> {
+  return request<{ session: CheckoutSession; events: any[] }>(`/api/checkout/sessions/${encodeURIComponent(id)}`);
+}
+
+export async function runCheckoutRecovery(id: string, forceAction?: string): Promise<CheckoutRecoveryResponse> {
+  return request<CheckoutRecoveryResponse>(`/api/checkout/recover/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    body: JSON.stringify(forceAction ? { force_action: forceAction } : {}),
+  });
+}
+
+export async function detectCheckoutAbandonments(): Promise<{ detected_count: number; abandoned_sessions: any[]; metrics: any }> {
+  return request<{ detected_count: number; abandoned_sessions: any[]; metrics: any }>('/api/checkout/detect', {
+    method: 'POST',
+  });
 }
 
 export async function getModelPerformance(): Promise<any> {

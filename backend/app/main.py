@@ -17,6 +17,14 @@ from backend.app.action_predictor import (
     predict_action_recovery,
     predict_all_action_recoveries,
 )
+from backend.app.abandonment_recovery import (
+    AbandonmentAction,
+    AbandonmentDetector,
+    CheckoutLifecycleStage,
+    CheckoutRecoveryAgent,
+    CheckoutSessionState,
+    CheckoutSessionStore,
+)
 from backend.app.audit_trail import AuditTrail
 from backend.app.config import settings
 from backend.app.database import get_db
@@ -27,6 +35,10 @@ from backend.app.policy_engine import PolicyEngine
 from backend.app.root_cause_agent import RootCauseAgent
 from backend.app.schemas import (
     AgentDecisionResponse,
+    CheckoutEventRequest,
+    CheckoutRecoveryRequest,
+    CheckoutRecoveryResponse,
+    CheckoutSessionCreateRequest,
     DashboardMetricsResponse,
     EventIngestRequest,
     EventIngestResponse,
@@ -602,6 +614,11 @@ def get_dashboard_metrics() -> DashboardMetricsResponse:
         "uplift_pct": 28.4,
     }
 
+    # Phase 17: Calculate Checkout Abandonment Metrics
+    chk_store = CheckoutSessionStore.get_instance()
+    chk_metrics = chk_store.calculate_dashboard_metrics()
+    total_abandoned_sessions = len(chk_store.list_sessions(abandoned_only=True))
+
     return DashboardMetricsResponse(
         total_failed_volume=round(total_failed_volume, 2),
         total_failed_count=total_failed_count,
@@ -616,12 +633,15 @@ def get_dashboard_metrics() -> DashboardMetricsResponse:
         recoverable_revenue=recoverable_revenue,
         revenue_recovered=round(total_revenue_recovered, 2),
         failed_payments_count=total_failed_count,
-        abandoned_checkouts_count=abandoned_checkouts,
+        abandoned_checkouts_count=max(abandoned_checkouts, total_abandoned_sessions),
         active_recoveries_count=active_recoveries,
         escalations_count=active_escalations,
         revenue_over_time=timeline_days,
         baseline_vs_ai=baseline_vs_ai,
         recovery_probability_distribution=prob_dist,
+        abandoned_checkout_revenue=chk_metrics["abandoned_checkout_revenue"],
+        recoverable_abandonment_revenue=chk_metrics["recoverable_abandonment_revenue"],
+        recovered_abandonment_revenue=chk_metrics["recovered_abandonment_revenue"],
     )
 
 
@@ -904,3 +924,101 @@ def analyze_root_cause(payload: Dict[str, Any]) -> Dict[str, Any]:
         payment_context=pay_ctx,
     )
     return res.to_dict()
+
+
+# -------------------------------------------------------------------------
+# Phase 17: Checkout Abandonment Recovery Endpoints
+# -------------------------------------------------------------------------
+
+@app.get("/api/checkout/sessions")
+def list_checkout_sessions(
+    stage: Optional[str] = Query(None, description="Filter by lifecycle stage"),
+    abandoned_only: bool = Query(False, description="Filter for abandoned checkouts only"),
+    limit: int = Query(50, ge=1, le=200),
+) -> Dict[str, Any]:
+    """Lists checkout sessions with their lifecycle state, features, and recovery status."""
+    store = CheckoutSessionStore.get_instance()
+    sessions = store.list_sessions(stage=stage, abandoned_only=abandoned_only, limit=limit)
+    metrics = store.calculate_dashboard_metrics()
+    return {
+        "total": len(sessions),
+        "sessions": [s.to_dict() for s in sessions],
+        "metrics": metrics,
+    }
+
+
+@app.get("/api/checkout/sessions/{session_id}")
+def get_checkout_session(session_id: str) -> Dict[str, Any]:
+    """Retrieves full details, lifecycle events, and recovery trace of a checkout session."""
+    store = CheckoutSessionStore.get_instance()
+    session = store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Checkout session '{session_id}' not found.")
+    return {
+        "session": session.to_dict(),
+        "events": [e.to_dict() for e in session.events],
+    }
+
+
+@app.post("/api/checkout/sessions")
+def create_checkout_session(req: CheckoutSessionCreateRequest) -> Dict[str, Any]:
+    """Creates a new checkout session initialized at specified lifecycle stage."""
+    store = CheckoutSessionStore.get_instance()
+    try:
+        stage_enum = CheckoutLifecycleStage(req.stage.upper())
+    except (ValueError, KeyError):
+        stage_enum = CheckoutLifecycleStage.PRODUCT_VIEW
+
+    sess = store.create_session(
+        customer_id=req.customer_id,
+        cart_value=req.cart_value,
+        stage=stage_enum,
+        device=req.device or "MOBILE",
+        payment_method=req.payment_method or "UPI",
+        previous_purchases=req.previous_purchases or 0,
+        previous_abandonment_count=req.previous_abandonment_count or 0,
+        risk_score=req.risk_score if req.risk_score is not None else 0.05,
+        dnd_enabled=req.dnd_enabled or False,
+    )
+    return sess.to_dict()
+
+
+@app.post("/api/checkout/sessions/{session_id}/events")
+def record_checkout_event(session_id: str, req: CheckoutEventRequest) -> Dict[str, Any]:
+    """Records a lifecycle progression event (e.g. CHECKOUT_STARTED -> PAYMENT_PAGE_OPENED)."""
+    store = CheckoutSessionStore.get_instance()
+    try:
+        stage_enum = CheckoutLifecycleStage(req.stage.upper())
+    except (ValueError, KeyError):
+        raise HTTPException(status_code=400, detail=f"Invalid lifecycle stage '{req.stage}'.")
+
+    try:
+        sess = store.record_lifecycle_event(session_id, stage_enum, req.metadata)
+        return sess.to_dict()
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/checkout/detect")
+def detect_abandonments() -> Dict[str, Any]:
+    """Scans all active checkout sessions and flags any inactive or dropped sessions as ABANDONED."""
+    store = CheckoutSessionStore.get_instance()
+    detected = store.detect_all_abandonments()
+    return {
+        "detected_count": len(detected),
+        "abandoned_sessions": detected,
+        "metrics": store.calculate_dashboard_metrics(),
+    }
+
+
+@app.post("/api/checkout/recover/{session_id}")
+def recover_abandoned_checkout(session_id: str, req: Optional[CheckoutRecoveryRequest] = None) -> Dict[str, Any]:
+    """Executes the complete autonomous recovery pipeline on an abandoned checkout session."""
+    store = CheckoutSessionStore.get_instance()
+    session = store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Checkout session '{session_id}' not found.")
+
+    force_action = req.force_action if req else None
+    result = store.agent.run_pipeline(session, force_action=force_action)
+    return result

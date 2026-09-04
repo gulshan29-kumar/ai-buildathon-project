@@ -120,6 +120,48 @@ class DashboardMetricsResponse(BaseModel):
     revenue_over_time: Optional[List[Dict[str, Any]]] = None
     baseline_vs_ai: Optional[Dict[str, Any]] = None
     recovery_probability_distribution: Optional[List[Dict[str, Any]]] = None
+    # Phase 17: Checkout Abandonment Metrics
+    abandoned_checkout_revenue: Optional[float] = None
+    recoverable_abandonment_revenue: Optional[float] = None
+    recovered_abandonment_revenue: Optional[float] = None
+
+
+class CheckoutSessionCreateRequest(BaseModel):
+    customer_id: str
+    cart_value: float = Field(gt=0, description="Cart monetary value in INR")
+    stage: Optional[str] = Field(default="PRODUCT_VIEW", description="Initial lifecycle stage")
+    device: Optional[str] = Field(default="MOBILE", description="User device (MOBILE, DESKTOP, TABLET)")
+    payment_method: Optional[str] = Field(default="UPI", description="Target payment method")
+    previous_purchases: Optional[int] = Field(default=0, ge=0)
+    previous_abandonment_count: Optional[int] = Field(default=0, ge=0)
+    risk_score: Optional[float] = Field(default=0.05, ge=0.0, le=1.0)
+    dnd_enabled: Optional[bool] = Field(default=False, description="Whether customer has DND/opt-out enabled")
+
+
+class CheckoutEventRequest(BaseModel):
+    stage: str = Field(description="New lifecycle stage (PRODUCT_VIEW, CHECKOUT_STARTED, PAYMENT_PAGE_OPENED, PAYMENT_INITIATED, PAYMENT_SUCCESS, ABANDONED)")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
+
+class CheckoutRecoveryRequest(BaseModel):
+    force_action: Optional[str] = Field(default=None, description="Optional override action (SEND_RECOVERY_MESSAGE, SCHEDULE_RETRY, STOP)")
+
+
+class CheckoutRecoveryResponse(BaseModel):
+    session_id: str
+    cart_value: float
+    dropoff_stage: Optional[str] = None
+    selected_action: str
+    recovery_probability: float
+    expected_recovery_value: float
+    policy_outcome: str
+    policy_rule_id: str
+    candidates: List[Dict[str, Any]]
+    execution: Dict[str, Any]
+    recovered: bool
+    recovered_amount: float
+    audit_hash: Optional[str] = None
+    session: Dict[str, Any]
 
 
 class SimulationRunRequest(BaseModel):

@@ -201,7 +201,7 @@ class PolicyEngine:
             )
 
         # Rule 8 (POL-008): Invalid payment state should stop
-        valid_states = {"CREATED", "INITIATED", "PROCESSING", "FAILED", "PENDING", "CANCELLED", "REFUNDED", ""}
+        valid_states = {"CREATED", "INITIATED", "PROCESSING", "FAILED", "PENDING", "CANCELLED", "REFUNDED", "ABANDONED", ""}
         if raw_status and raw_status not in valid_states:
             self.log_denial_audit("POL-008", action, f"Corrupted or invalid payment state: '{raw_status}'", PolicySeverity.CRITICAL.value, txn_id)
             return PolicyDecision(
@@ -310,10 +310,10 @@ class PolicyEngine:
 
         # Rule 9 (POL-009): Customer communication must respect permissions
         if action == "SEND_RECOVERY_MESSAGE":
-            cust = customer_context or {}
-            opt_out = cust.get("communication_opt_out", False) or cust.get("opt_out", False)
-            dnd = cust.get("dnd", False) or cust.get("do_not_disturb", False)
-            communication_allowed = cust.get("communication_allowed", True)
+            cust = customer_context or event.get("customer_context") or {}
+            opt_out = cust.get("communication_opt_out", False) or cust.get("opt_out", False) or event.get("communication_opt_out", False) or event.get("opt_out", False)
+            dnd = cust.get("dnd", False) or cust.get("do_not_disturb", False) or event.get("dnd", False) or event.get("dnd_enabled", False)
+            communication_allowed = cust.get("communication_allowed", True) and event.get("communication_allowed", True)
 
             if opt_out or dnd or not communication_allowed:
                 self.log_denial_audit("POL-009", action, "Customer opted out or DND active", PolicySeverity.MEDIUM.value, txn_id)

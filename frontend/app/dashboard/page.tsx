@@ -17,6 +17,13 @@ import {
   Layers,
   BarChart2,
   PieChart as PieIcon,
+  MessageSquare,
+  CheckCircle2,
+  Clock,
+  Send,
+  Smartphone,
+  ShieldCheck,
+  ShoppingBag,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -37,8 +44,12 @@ import MetricCard from '../../components/MetricCard';
 import {
   getDashboardMetrics,
   getTransactions,
+  getCheckoutSessions,
+  runCheckoutRecovery,
+  detectCheckoutAbandonments,
   DashboardMetrics,
   Transaction,
+  CheckoutSession,
   formatINR,
   formatNumber,
   formatPercent,
@@ -51,26 +62,62 @@ const PIE_COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#8B5
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentTxns, setRecentTxns] = useState<Transaction[]>([]);
+  const [checkoutSessions, setCheckoutSessions] = useState<CheckoutSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [recoveringId, setRecoveringId] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const [recoveryBanner, setRecoveryBanner] = useState<{ id: string; action: string; amount: number; hash?: string } | null>(null);
 
   const loadData = async (isManualRefresh = false) => {
     if (isManualRefresh) setRefreshing(true);
     setError(null);
     try {
-      const [m, txnsRes] = await Promise.all([
+      const [m, txnsRes, chkRes] = await Promise.all([
         getDashboardMetrics(),
         getTransactions({ limit: 8 }),
+        getCheckoutSessions({ limit: 10 }),
       ]);
       setMetrics(m);
       setRecentTxns(txnsRes.transactions || []);
+      setCheckoutSessions(chkRes.sessions || []);
     } catch (err: any) {
       console.error('Failed to load dashboard metrics:', err);
       setError(err.message || 'Failed to connect to backend engine.');
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleRecoverCheckout = async (sessionId: string) => {
+    setRecoveringId(sessionId);
+    try {
+      const res = await runCheckoutRecovery(sessionId);
+      setRecoveryBanner({
+        id: sessionId,
+        action: res.selected_action,
+        amount: res.recovered_amount,
+        hash: res.audit_hash,
+      });
+      await loadData(true);
+    } catch (err: any) {
+      console.error('Failed to recover checkout:', err);
+    } finally {
+      setRecoveringId(null);
+    }
+  };
+
+  const handleDetectAbandonment = async () => {
+    setDetecting(true);
+    try {
+      await detectCheckoutAbandonments();
+      await loadData(true);
+    } catch (err: any) {
+      console.error('Failed to detect abandonments:', err);
+    } finally {
+      setDetecting(false);
     }
   };
 
@@ -273,6 +320,89 @@ export default function DashboardPage() {
           variant="amber"
           loading={loading}
         />
+      </div>
+
+      {/* Phase 17: Checkout Abandonment Revenue Metrics */}
+      <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/30 via-slate-900/60 to-purple-950/30 p-5 shadow-fintech-card space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 rounded-lg bg-indigo-950 border border-indigo-500/40 text-indigo-400">
+              <ShoppingBag className="h-4 w-4" />
+            </span>
+            <div>
+              <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                Checkout Abandonment Recovery
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+                  Phase 17 Active
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Proactive 6-stage lifecycle tracking, 8-feature ML recoverability scoring, and policy guardrails.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleDetectAbandonment}
+            disabled={detecting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition active:scale-95 disabled:opacity-50 font-mono shadow-fintech-glow"
+          >
+            <Clock className={`h-3.5 w-3.5 ${detecting ? 'animate-spin' : ''}`} />
+            <span>{detecting ? 'Scanning Sessions...' : 'Detect Inactive Abandonments'}</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+          {/* Abandoned Checkout Revenue */}
+          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+                Abandoned Checkout Revenue
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-500/30">
+                Cart Loss
+              </span>
+            </div>
+            <p className="text-xl font-bold font-tabular text-white">
+              {formatINR(metrics?.abandoned_checkout_revenue ?? 0)}
+            </p>
+            <p className="text-[11px] text-slate-500">Total value dropped before payment success</p>
+          </div>
+
+          {/* Recoverable Abandonment Revenue */}
+          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+                <TrendingUp className="h-3.5 w-3.5 text-indigo-400" />
+                Recoverable Abandonment Revenue
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-500/30">
+                ML Predicted
+              </span>
+            </div>
+            <p className="text-xl font-bold font-tabular text-indigo-300">
+              {formatINR(metrics?.recoverable_abandonment_revenue ?? 0)}
+            </p>
+            <p className="text-[11px] text-slate-500">Targetable opportunity via 1-click messaging & retry</p>
+          </div>
+
+          {/* Recovered Abandonment Revenue */}
+          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 space-y-1 bg-gradient-to-b from-emerald-950/20 to-slate-900/80 shadow-fintech-glow-emerald">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
+                Recovered Abandonment Revenue
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+                Live Captured
+              </span>
+            </div>
+            <p className="text-xl font-bold font-tabular text-emerald-400">
+              {formatINR(metrics?.recovered_abandonment_revenue ?? 0)}
+            </p>
+            <p className="text-[11px] text-slate-400">Net revenue saved from converted abandoned carts</p>
+          </div>
+        </div>
       </div>
 
       {/* 5 Visual Fintech Charts */}
@@ -510,6 +640,228 @@ export default function DashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+
+      {/* Phase 17: Interactive Checkout Abandonment Recovery Console */}
+      <div className="rounded-xl border border-indigo-500/30 bg-fintech-card/90 p-6 shadow-fintech-card glass-panel space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <span className="p-2.5 rounded-xl bg-indigo-950/80 border border-indigo-500/40 text-indigo-400">
+              <ShoppingBag className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                Checkout Abandonment Recovery Console
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+                  Phase 17 Live
+                </span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Proactive 6-stage lifecycle tracking, 8-feature ML recoverability scoring, and policy-governed cart recovery.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDetectAbandonment}
+              disabled={detecting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition active:scale-95 disabled:opacity-50 font-mono"
+            >
+              <Clock className={`h-3.5 w-3.5 ${detecting ? 'animate-spin text-indigo-400' : ''}`} />
+              <span>{detecting ? 'Scanning...' : 'Scan Abandonments'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Live Recovery Success Toast Banner */}
+        {recoveryBanner && (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-4 text-xs text-emerald-300 flex items-center justify-between animate-fadeIn">
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
+              <div>
+                <span className="font-bold text-white">Cart Recovery Dispatched! </span>
+                <span>Session <strong className="font-mono text-emerald-300">{recoveryBanner.id}</strong> executed via <strong className="font-mono text-indigo-300">{recoveryBanner.action}</strong>.</span>
+                {recoveryBanner.amount > 0 && (
+                  <span className="ml-2 font-bold text-emerald-400">Captured {formatINR(recoveryBanner.amount)}</span>
+                )}
+                {recoveryBanner.hash && (
+                  <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                    Audit SHA-256: {recoveryBanner.hash.slice(0, 24)}...
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setRecoveryBanner(null)}
+              className="text-slate-400 hover:text-white text-xs font-mono px-2 py-1"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* 6-Stage Checkout Lifecycle Breadcrumb */}
+        <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-[11px] space-y-2">
+          <div className="flex items-center justify-between text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+            <span>6-Stage Monitored Checkout Lifecycle</span>
+            <span>Policy Gated: POL-001 &bull; POL-003 &bull; POL-004 &bull; POL-009</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {[
+              { step: '1', name: 'PRODUCT_VIEW', desc: 'Browsing cart' },
+              { step: '2', name: 'CHECKOUT_STARTED', desc: 'Entered flow' },
+              { step: '3', name: 'PAYMENT_PAGE_OPENED', desc: 'Payment screen' },
+              { step: '4', name: 'PAYMENT_INITIATED', desc: 'Auth requested' },
+              { step: '5', name: 'PAYMENT_SUCCESS', desc: 'Order placed' },
+              { step: '6', name: 'ABANDONED', desc: 'Dropped off' },
+            ].map((st) => (
+              <div
+                key={st.name}
+                className={`p-2 rounded border font-mono ${
+                  st.name === 'ABANDONED'
+                    ? 'border-amber-500/40 bg-amber-950/20 text-amber-300'
+                    : st.name === 'PAYMENT_SUCCESS'
+                    ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-300'
+                    : 'border-slate-800 bg-slate-950/40 text-slate-400'
+                }`}
+              >
+                <div className="font-bold flex items-center gap-1">
+                  <span>{st.step}.</span>
+                  <span className="truncate">{st.name}</span>
+                </div>
+                <div className="text-[10px] text-slate-500 truncate mt-0.5">{st.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Abandoned Sessions Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[11px] bg-slate-900/40">
+              <tr>
+                <th className="py-3 px-4">Session ID</th>
+                <th className="py-3 px-4">Customer / Risk</th>
+                <th className="py-3 px-4">Cart Value</th>
+                <th className="py-3 px-4">Lifecycle Stage</th>
+                <th className="py-3 px-4">Extracted Features</th>
+                <th className="py-3 px-4">Recommended Action</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Autonomous Recovery</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 font-medium">
+              {checkoutSessions.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-slate-500">
+                    No active checkout sessions detected.
+                  </td>
+                </tr>
+              ) : (
+                checkoutSessions.map((sess) => {
+                  const isRecovering = recoveringId === sess.session_id;
+                  const isSuccess = sess.recovered || sess.current_stage === 'PAYMENT_SUCCESS';
+                  const isStopped = sess.recovery_action === 'STOP';
+
+                  return (
+                    <tr key={sess.session_id} className="hover:bg-slate-800/40 transition">
+                      <td className="py-3 px-4 font-mono text-indigo-300 font-bold">
+                        {sess.session_id}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-mono text-slate-200">{sess.customer_id}</div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span
+                            className={`text-[9px] font-mono px-1 rounded ${
+                              sess.risk_score > 0.6
+                                ? 'bg-rose-950 text-rose-400'
+                                : sess.risk_score > 0.2
+                                ? 'bg-amber-950 text-amber-400'
+                                : 'bg-emerald-950 text-emerald-400'
+                            }`}
+                          >
+                            Risk: {sess.risk_score}
+                          </span>
+                          {sess.dnd_enabled && (
+                            <span className="text-[9px] font-mono px-1 rounded bg-purple-950 text-purple-400">
+                              DND Active
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-tabular text-white font-bold">
+                        {formatINR(sess.cart_value)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                            sess.current_stage === 'PAYMENT_SUCCESS'
+                              ? 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
+                              : sess.current_stage === 'ABANDONED'
+                              ? 'bg-amber-950 text-amber-300 border-amber-500/40'
+                              : 'bg-indigo-950 text-indigo-300 border-indigo-500/40'
+                          }`}
+                        >
+                          {sess.current_stage}
+                        </span>
+                        {sess.dropoff_stage && sess.current_stage === 'ABANDONED' && (
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            from {sess.dropoff_stage}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 text-[11px]">
+                        <div className="flex flex-wrap items-center gap-1 font-mono text-[10px]">
+                          <span className="bg-slate-800 text-slate-300 px-1 rounded">{sess.device}</span>
+                          <span className="bg-slate-800 text-slate-300 px-1 rounded">{sess.payment_method}</span>
+                          <span className="bg-slate-800 text-slate-400 px-1 rounded">Past: {sess.previous_purchases}</span>
+                          <span className="bg-slate-800 text-slate-400 px-1 rounded">{Math.round(sess.checkout_duration)}s</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-500/30">
+                          {sess.recovery_action || (sess.dnd_enabled ? 'SCHEDULE_RETRY' : sess.risk_score > 0.6 ? 'STOP' : 'SEND_RECOVERY_MESSAGE')}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {isSuccess ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+                            RECOVERED
+                          </span>
+                        ) : isStopped ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 text-slate-400 border border-slate-700">
+                            BLOCKED / STOP
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-950 text-amber-300 border border-amber-500/30">
+                            ABANDONED
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {isSuccess ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 font-mono">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Captured
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleRecoverCheckout(sess.session_id)}
+                            disabled={isRecovering}
+                            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/40 px-3 py-1.5 rounded transition shadow-fintech-glow active:scale-95 disabled:opacity-50"
+                          >
+                            <Send className={`h-3 w-3 ${isRecovering ? 'animate-spin' : ''}`} />
+                            <span>{isRecovering ? 'Executing...' : 'Recover Cart'}</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
