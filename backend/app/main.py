@@ -7,7 +7,7 @@ import random
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -66,9 +66,27 @@ from backend.app.subscription_recovery import (
     SubscriptionStore,
 )
 
-# Configure structured application logger
+from backend.app.security import (
+    IdempotencyConflictError,
+    IdempotencyManager,
+    IdempotencyMismatchError,
+    PIIFilter,
+    PromptInjectionDetectedError,
+    PromptInjectionDetector,
+    RateLimitExceededError,
+    SlidingWindowRateLimiter,
+    UnauthorizedToolError,
+    get_idempotency_manager,
+    get_rate_limiter,
+    verify_api_key,
+)
+
+# Configure structured application logger with automatic PII & secret scrubbing
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("backend.app")
+for handler in logging.root.handlers:
+    handler.addFilter(PIIFilter())
+logger.addFilter(PIIFilter())
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -93,6 +111,10 @@ agent_tools = AgentTools(simulator=simulator, policy_engine=policy_engine)
 orchestrator = RecoveryOrchestrator(tools=agent_tools)
 root_cause_agent = RootCauseAgent()
 audit_trail = AuditTrail.get_instance()
+
+# Security & Idempotency Singletons
+idempotency_mgr = get_idempotency_manager()
+rate_limiter = get_rate_limiter()
 
 idempotency_store: Dict[str, Dict[str, Any]] = {}
 simulation_runs_store: Dict[str, Dict[str, Any]] = {}
@@ -209,6 +231,62 @@ seed_sandbox_transactions()
 
 # --- Structured Error Handlers ---
 
+@app.exception_handler(RateLimitExceededError)
+async def rate_limit_exception_handler(request: Request, exc: RateLimitExceededError) -> JSONResponse:
+    logger.warning(f"Rate limit exceeded on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=429,
+        headers={"Retry-After": str(exc.retry_after)},
+        content={
+            "error": "RATE_LIMIT_EXCEEDED",
+            "detail": str(exc),
+            "retry_after": exc.retry_after,
+            "status_code": 429,
+        },
+    )
+
+
+@app.exception_handler(IdempotencyConflictError)
+async def idempotency_conflict_handler(request: Request, exc: IdempotencyConflictError) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={"error": "IDEMPOTENCY_CONFLICT", "detail": str(exc), "status_code": 409},
+    )
+
+
+@app.exception_handler(IdempotencyMismatchError)
+async def idempotency_mismatch_handler(request: Request, exc: IdempotencyMismatchError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"error": "IDEMPOTENCY_PAYLOAD_MISMATCH", "detail": str(exc), "status_code": 422},
+    )
+
+
+@app.exception_handler(PromptInjectionDetectedError)
+async def prompt_injection_handler(request: Request, exc: PromptInjectionDetectedError) -> JSONResponse:
+    logger.warning(f"Prompt injection blocked on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=400,
+        content={"error": "SECURITY_VIOLATION", "detail": str(exc), "status_code": 400},
+    )
+
+
+@app.exception_handler(UnauthorizedToolError)
+async def unauthorized_tool_handler(request: Request, exc: UnauthorizedToolError) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={"error": "UNAUTHORIZED_TOOL", "detail": str(exc), "status_code": 403},
+    )
+
+
+@app.exception_handler(PolicyBlockedExecutionError)
+async def policy_blocked_handler(request: Request, exc: PolicyBlockedExecutionError) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={"error": "POLICY_BLOCKED", "detail": str(exc), "status_code": 403},
+    )
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     logger.warning(f"HTTP error {exc.status_code} on {request.url.path}: {exc.detail}")
@@ -284,17 +362,38 @@ def get_health() -> HealthResponse:
 @app.post("/api/events", response_model=EventIngestResponse, status_code=201)
 def ingest_payment_event(
     event: EventIngestRequest,
+    request: Request,
+    idempotency_key_header: Optional[str] = Header(None, alias="Idempotency-Key"),
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
     db: Session = Depends(get_db),
 ) -> EventIngestResponse:
-    """Ingests a payment event with idempotency protection and sandbox registration."""
-    # Idempotency Protection
-    if event.idempotency_key and event.idempotency_key in idempotency_store:
-        logger.info(f"Idempotency hit for key '{event.idempotency_key}'")
-        cached = idempotency_store[event.idempotency_key]
-        return EventIngestResponse(**cached)
+    """Ingests a payment event with rate limiting, idempotency protection, replay prevention, and sandbox registration."""
+    # 1. Rate Limiting (120 req/min per IP)
+    client_id = request.client.host if request.client else "unknown"
+    rate_limiter.enforce(identifier=f"events:{client_id}", limit=120, window_seconds=60)
+
+    # 2. Idempotency Key Resolution & Protection
+    idem_key = idempotency_key_header or x_idempotency_key or event.idempotency_key
+    if idem_key:
+        cached = idempotency_mgr.start_request(idem_key, event.model_dump())
+        if cached:
+            return EventIngestResponse(**cached[1])
+
+    # 3. Prompt Injection / Input Sanitization
+    fcode_str = str(event.failure_code or "NONE")
+    PromptInjectionDetector.scan_and_raise(fcode_str, context_label="failure_code")
+    if event.metadata:
+        PromptInjectionDetector.scan_dict(event.metadata, prefix="metadata")
 
     event_id = f"evt_{uuid.uuid4().hex[:12]}"
     txn_id = event.transaction_id or f"txn_{uuid.uuid4().hex[:10]}"
+
+    # 4. Duplicate Event & Replay Attack Defense
+    idempotency_mgr.verify_and_record_event(
+        event_id=event_id,
+        transaction_id=txn_id,
+        event_type="PAYMENT_FAILED",
+    )
 
     # Register payment in simulator with policy guardrail handling
     try:
@@ -307,7 +406,7 @@ def ingest_payment_event(
             failure_code=event.failure_code,
             risk_score=event.risk_score,
             transaction_id=txn_id,
-            idempotency_key=event.idempotency_key,
+            idempotency_key=idem_key,
         )
     except PolicyBlockedExecutionError:
         created = {
@@ -346,12 +445,13 @@ def ingest_payment_event(
         "transaction_id": txn_id,
         "status": created.get("status", "FAILED"),
         "message": f"Payment event ingested successfully with failure code '{event.failure_code or 'NONE'}'.",
-        "idempotency_key": event.idempotency_key,
+        "idempotency_key": idem_key,
         "simulated": True,
     }
 
-    if event.idempotency_key:
-        idempotency_store[event.idempotency_key] = response_data
+    if idem_key:
+        idempotency_mgr.complete_request(idem_key, 201, response_data)
+        idempotency_store[idem_key] = response_data
 
     logger.info(f"Ingested event {event_id} for transaction {txn_id} (amount=₹{event.amount:,.2f})")
     return EventIngestResponse(**response_data)
@@ -403,10 +503,28 @@ def get_transaction(transaction_id: str) -> Dict[str, Any]:
 # --- Recovery Execution & Status ---
 
 @app.post("/api/recovery/run/{transaction_id}", response_model=RecoveryRunResponse)
-def run_recovery_for_transaction(transaction_id: str) -> RecoveryRunResponse:
-    """Executes the Agentic Recovery Orchestrator on a specific transaction."""
+def run_recovery_for_transaction(
+    transaction_id: str,
+    request: Request,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+) -> RecoveryRunResponse:
+    """Executes the Agentic Recovery Orchestrator on a specific transaction with rate limiting and idempotency."""
+    # 1. Rate Limiting (30 req/min for agent orchestrator)
+    client_id = request.client.host if request.client else "unknown"
+    rate_limiter.enforce(identifier=f"recovery:{client_id}", limit=30, window_seconds=60)
+
+    # 2. Idempotency Check
+    idem_key = idempotency_key or x_idempotency_key
+    if idem_key:
+        cached = idempotency_mgr.start_request(idem_key, {"transaction_id": transaction_id})
+        if cached:
+            return RecoveryRunResponse(**cached[1])
+
     payment = simulator.payments.get(transaction_id)
     if not payment:
+        if idem_key:
+            idempotency_mgr.fail_request(idem_key)
         raise HTTPException(
             status_code=404,
             detail=f"Transaction '{transaction_id}' not found; cannot execute recovery.",
@@ -433,6 +551,10 @@ def run_recovery_for_transaction(transaction_id: str) -> RecoveryRunResponse:
         "errors": result.get("errors", []),
     }
     recovery_results_store[transaction_id] = recovery_payload
+
+    if idem_key:
+        idempotency_mgr.complete_request(idem_key, 200, recovery_payload)
+
     logger.info(f"Recovery executed for {transaction_id}: action={selected_act}, outcome={result.get('monitoring_outcome')}")
     return RecoveryRunResponse(**recovery_payload)
 
@@ -735,13 +857,29 @@ def run_model_evaluation() -> Dict[str, Any]:
 # --- Simulation Endpoints ---
 
 @app.post("/api/simulation/run", response_model=SimulationRunResponse)
-def run_simulation(request: SimulationRunRequest) -> SimulationRunResponse:
+def run_simulation(
+    sim_request: SimulationRunRequest,
+    request: Request,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+) -> SimulationRunResponse:
     """Executes a large-scale comparative simulation comparing BASELINE vs RAZORRECOVER AI."""
-    engine = SimulationEngine(seed=request.seed)
+    # 1. Rate Limiting (20 runs/min)
+    client_id = request.client.host if request.client else "unknown"
+    rate_limiter.enforce(identifier=f"simulation:{client_id}", limit=20, window_seconds=60)
+
+    # 2. Idempotency Check
+    idem_key = idempotency_key or x_idempotency_key
+    if idem_key:
+        cached = idempotency_mgr.start_request(idem_key, sim_request.model_dump())
+        if cached:
+            return SimulationRunResponse(**cached[1])
+
+    engine = SimulationEngine(seed=sim_request.seed)
     result = engine.run_comparison(
-        transaction_count=request.transaction_count,
-        seed=request.seed,
-        scenario=request.scenario or "mixed_failures",
+        transaction_count=sim_request.transaction_count,
+        seed=sim_request.seed,
+        scenario=sim_request.scenario or "mixed_failures",
     )
 
     # Populate backward-compatible fields for legacy clients/tests
@@ -751,6 +889,10 @@ def run_simulation(request: SimulationRunRequest) -> SimulationRunResponse:
     result["recovery_rate"] = result["ai_metrics"]["recovery_rate"]
 
     simulation_runs_store[result["run_id"]] = result
+
+    if idem_key:
+        idempotency_mgr.complete_request(idem_key, 200, result)
+
     logger.info(
         f"Comparative simulation {result['run_id']} finished: "
         f"AI recovered {result['ai_metrics']['recovered_count']}/{result['total_transactions']} "
@@ -808,14 +950,17 @@ def get_simulation_transaction(run_id: str, txn_id: str) -> Dict[str, Any]:
 # --- Baseline Benchmark Endpoints (Phase 20) ---
 
 @app.post("/api/benchmark/run", response_model=BenchmarkRunResponse)
-def run_benchmark(request: BenchmarkRunRequest) -> BenchmarkRunResponse:
+def run_benchmark(bench_request: BenchmarkRunRequest, request: Request) -> BenchmarkRunResponse:
     """Executes empirical baseline comparison across all 6 recovery strategies on a fixed seed."""
-    engine = BaselineComparisonEngine(seed=request.seed)
+    client_id = request.client.host if request.client else "unknown"
+    rate_limiter.enforce(identifier=f"benchmark:{client_id}", limit=20, window_seconds=60)
+
+    engine = BaselineComparisonEngine(seed=bench_request.seed)
     result = engine.run_benchmark(
-        transaction_count=request.transaction_count,
-        scenario=request.scenario or "mixed_failures",
-        seed=request.seed,
-        save_results=request.save_results,
+        transaction_count=bench_request.transaction_count,
+        scenario=bench_request.scenario or "mixed_failures",
+        seed=bench_request.seed,
+        save_results=bench_request.save_results,
     )
     return BenchmarkRunResponse(**result)
 
@@ -1080,15 +1225,36 @@ def detect_abandonments() -> Dict[str, Any]:
 
 
 @app.post("/api/checkout/recover/{session_id}")
-def recover_abandoned_checkout(session_id: str, req: Optional[CheckoutRecoveryRequest] = None) -> Dict[str, Any]:
-    """Executes the complete autonomous recovery pipeline on an abandoned checkout session."""
+def recover_abandoned_checkout(
+    session_id: str,
+    request: Request,
+    req: Optional[CheckoutRecoveryRequest] = None,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+) -> Dict[str, Any]:
+    """Executes the complete autonomous recovery pipeline on an abandoned checkout session with rate limiting."""
+    client_id = request.client.host if request.client else "unknown"
+    rate_limiter.enforce(identifier=f"checkout:{client_id}", limit=30, window_seconds=60)
+
+    idem_key = idempotency_key or x_idempotency_key
+    if idem_key:
+        cached = idempotency_mgr.start_request(idem_key, {"session_id": session_id})
+        if cached:
+            return cached[1]
+
     store = CheckoutSessionStore.get_instance()
     session = store.get_session(session_id)
     if not session:
+        if idem_key:
+            idempotency_mgr.fail_request(idem_key)
         raise HTTPException(status_code=404, detail=f"Checkout session '{session_id}' not found.")
 
     force_action = req.force_action if req else None
     result = store.agent.run_pipeline(session, force_action=force_action)
+
+    if idem_key:
+        idempotency_mgr.complete_request(idem_key, 200, result)
+
     return result
 
 
@@ -1188,14 +1354,35 @@ def record_subscription_event(subscription_id: str, req: SubscriptionEventReques
 
 
 @app.post("/api/subscriptions/{subscription_id}/recover")
-def recover_subscription_payment(subscription_id: str, req: Optional[SubscriptionRecoveryRequest] = None) -> Dict[str, Any]:
-    """Executes the complete autonomous recovery pipeline on a failed subscription renewal."""
+def recover_subscription_payment(
+    subscription_id: str,
+    request: Request,
+    req: Optional[SubscriptionRecoveryRequest] = None,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+) -> Dict[str, Any]:
+    """Executes the complete autonomous recovery pipeline on a failed subscription renewal with rate limiting."""
+    client_id = request.client.host if request.client else "unknown"
+    rate_limiter.enforce(identifier=f"subscription:{client_id}", limit=30, window_seconds=60)
+
+    idem_key = idempotency_key or x_idempotency_key
+    if idem_key:
+        cached = idempotency_mgr.start_request(idem_key, {"subscription_id": subscription_id})
+        if cached:
+            return cached[1]
+
     store = SubscriptionStore.get_instance()
     sub = store.get_subscription(subscription_id)
     if not sub:
+        if idem_key:
+            idempotency_mgr.fail_request(idem_key)
         raise HTTPException(status_code=404, detail=f"Subscription '{subscription_id}' not found.")
 
     fcode = req.failure_code if req and req.failure_code else None
     force_action = req.force_action if req and req.force_action else None
     result = store.agent.run_pipeline(sub, failure_code=fcode, force_action=force_action)
+
+    if idem_key:
+        idempotency_mgr.complete_request(idem_key, 200, result)
+
     return result

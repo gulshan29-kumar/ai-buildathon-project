@@ -14,6 +14,12 @@ from backend.app.audit_trail import AuditTrail
 from backend.app.decision_engine import DecisionEngine
 from backend.app.failure_classifier import FailureClassifier
 from backend.app.policy_engine import PolicyDecision, PolicyEngine
+from backend.app.security.safe_tools import (
+    InvalidToolParameterError,
+    PolicyBypassAttemptError,
+    SafeToolRegistry,
+    UnauthorizedToolError,
+)
 from backend.app.simulator import PaymentSimulator, PolicyBlockedExecutionError
 
 logger = logging.getLogger(__name__)
@@ -63,6 +69,7 @@ class AgentTools:
         self.simulator = simulator or PaymentSimulator()
         self.policy_engine = policy_engine or PolicyEngine()
         self.action_predictor = action_predictor or ActionRecoveryPredictor()
+        self.safe_registry = SafeToolRegistry(policy_engine=self.policy_engine, simulator=self.simulator)
         self.audit_events: List[Dict[str, Any]] = []
 
     def get_transaction(self, transaction_id: str) -> Dict[str, Any]:
@@ -109,49 +116,52 @@ class AgentTools:
         customer_context: Optional[Dict[str, Any]] = None,
     ) -> PolicyDecision:
         """Tool 6: Evaluate deterministic policy rules for an action."""
-        eval_event = dict(transaction)
-        eval_event["action"] = action
-        return self.policy_engine.evaluate(
-            eval_event,
+        self.safe_registry.validate_tool_name(action)
+        return self.safe_registry.evaluate_policy(
+            action=action,
+            transaction=transaction,
             customer_context=customer_context,
-            previous_attempts=max(0, int(transaction.get("attempt_number", 1)) - 1),
         )
 
     def retry_payment(self, transaction_id: str, delay_seconds: int = 0) -> Dict[str, Any]:
         """Tool 7: Safe payment retry through policy gate and simulator."""
+        self.safe_registry.validate_parameters("RETRY_PAYMENT", {"delay_seconds": delay_seconds})
         txn = self.get_transaction(transaction_id)
-        pol = self.check_policy("RETRY_PAYMENT", txn)
-        if not pol.allowed:
-            raise PolicyBlockedExecutionError(f"Policy blocked retry: {pol.reason} (Rule: {pol.rule_id})")
+        self.safe_registry.enforce_policy_gate("RETRY_PAYMENT", txn)
         return self.simulator.retry_payment(transaction_id, delay_seconds=delay_seconds)
 
     def switch_payment_method(self, transaction_id: str, new_payment_method: str) -> Dict[str, Any]:
         """Tool 8: Switch payment instrument and re-attempt recovery."""
+        self.safe_registry.validate_parameters("SWITCH_PAYMENT_METHOD", {"new_payment_method": new_payment_method})
         txn = self.get_transaction(transaction_id)
-        pol = self.check_policy("SWITCH_PAYMENT_METHOD", txn)
-        if not pol.allowed:
-            raise PolicyBlockedExecutionError(f"Policy blocked switch: {pol.reason} (Rule: {pol.rule_id})")
+        self.safe_registry.enforce_policy_gate("SWITCH_PAYMENT_METHOD", txn)
         return self.simulator.switch_payment_method(transaction_id, new_payment_method)
 
     def send_recovery_message(self, transaction_id: str, channel: str = "WHATSAPP") -> Dict[str, Any]:
         """Tool 9: Dispatch recovery link to customer."""
+        self.safe_registry.validate_parameters("SEND_RECOVERY_MESSAGE", {"channel": channel})
         txn = self.get_transaction(transaction_id)
-        pol = self.check_policy("SEND_RECOVERY_MESSAGE", txn)
-        if not pol.allowed:
-            raise PolicyBlockedExecutionError(f"Policy blocked message: {pol.reason} (Rule: {pol.rule_id})")
+        self.safe_registry.enforce_policy_gate("SEND_RECOVERY_MESSAGE", txn)
         return self.simulator.send_recovery_message(transaction_id, channel=channel)
 
     def schedule_retry(self, transaction_id: str, delay_seconds: int = 300) -> Dict[str, Any]:
         """Tool 10: Schedule a delayed retry."""
+        self.safe_registry.validate_parameters("SCHEDULE_RETRY", {"delay_seconds": delay_seconds})
         txn = self.get_transaction(transaction_id)
-        pol = self.check_policy("SCHEDULE_RETRY", txn)
-        if not pol.allowed:
-            raise PolicyBlockedExecutionError(f"Policy blocked schedule: {pol.reason} (Rule: {pol.rule_id})")
+        self.safe_registry.enforce_policy_gate("SCHEDULE_RETRY", txn)
         return self.simulator.schedule_retry(transaction_id, delay_seconds=delay_seconds)
 
     def get_payment_status(self, transaction_id: str) -> Dict[str, Any]:
         """Tool 11: Inspect payment status and event timeline."""
         return self.simulator.get_payment_status(transaction_id)
+
+    def execute_safe_tool(self, tool_name: str, **kwargs: Any) -> Any:
+        """Executes an authorized tool enforcing the safe tool allowlist."""
+        self.safe_registry.validate_tool_name(tool_name)
+        func = getattr(self, tool_name, None)
+        if not func or not callable(func):
+            raise UnauthorizedToolError(f"Tool '{tool_name}' cannot be invoked directly.")
+        return func(**kwargs)
 
     def escalate_case(self, transaction_id: str, reason: str, severity: str = "HIGH") -> Dict[str, Any]:
         """Tool 12: Escalate case to human risk operations."""

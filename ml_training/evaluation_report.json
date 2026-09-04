@@ -2,7 +2,7 @@
   "model_version": "1.0.0-xgb",
   "model_name": "XGBoost Calibrated Recovery Classifier",
   "trained_at": "2026-09-02T22:08:56.732302",
-  "evaluated_at": "2026-09-04T21:04:44.446227",
+  "evaluated_at": "2026-09-04T21:25:57.947319",
   "dataset_metadata": {
     "total_dataset_transactions": 100000,
     "recovery_cohort_size": 23450,

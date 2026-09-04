@@ -32,16 +32,16 @@ class RecoveryDecision(BaseModel):
 
 
 class EventIngestRequest(BaseModel):
-    amount: float = Field(..., gt=0, description="Payment transaction amount in INR")
-    currency: str = Field(default="INR", description="Currency ISO code")
-    payment_method: str = Field(default="UPI", description="Payment method instrument")
-    gateway: str = Field(default="SIMULATOR", description="Gateway/Acquirer rail")
-    customer_id: str = Field(default="cust_demo", description="Customer identifier")
-    merchant_id: str = Field(default="merch_demo", description="Merchant identifier")
-    failure_code: Optional[str] = Field(default=None, description="Specific failure code")
+    amount: float = Field(..., gt=0, le=10000000, description="Payment transaction amount in INR (max 10M)")
+    currency: str = Field(default="INR", max_length=10, description="Currency ISO code")
+    payment_method: str = Field(default="UPI", max_length=50, description="Payment method instrument")
+    gateway: str = Field(default="SIMULATOR", max_length=50, description="Gateway/Acquirer rail")
+    customer_id: str = Field(default="cust_demo", max_length=128, description="Customer identifier")
+    merchant_id: str = Field(default="merch_demo", max_length=128, description="Merchant identifier")
+    failure_code: Optional[str] = Field(default=None, max_length=100, description="Specific failure code")
     risk_score: float = Field(default=0.05, ge=0.0, le=1.0, description="Fraud risk score")
-    idempotency_key: Optional[str] = Field(default=None, description="Idempotency key")
-    transaction_id: Optional[str] = Field(default=None, description="Optional custom transaction ID")
+    idempotency_key: Optional[str] = Field(default=None, max_length=256, description="Idempotency key")
+    transaction_id: Optional[str] = Field(default=None, max_length=128, description="Optional custom transaction ID")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata payload")
 
 
@@ -127,13 +127,13 @@ class DashboardMetricsResponse(BaseModel):
 
 
 class CheckoutSessionCreateRequest(BaseModel):
-    customer_id: str
-    cart_value: float = Field(gt=0, description="Cart monetary value in INR")
-    stage: Optional[str] = Field(default="PRODUCT_VIEW", description="Initial lifecycle stage")
-    device: Optional[str] = Field(default="MOBILE", description="User device (MOBILE, DESKTOP, TABLET)")
-    payment_method: Optional[str] = Field(default="UPI", description="Target payment method")
-    previous_purchases: Optional[int] = Field(default=0, ge=0)
-    previous_abandonment_count: Optional[int] = Field(default=0, ge=0)
+    customer_id: str = Field(max_length=128)
+    cart_value: float = Field(gt=0, le=10000000, description="Cart monetary value in INR")
+    stage: Optional[str] = Field(default="PRODUCT_VIEW", max_length=50, description="Initial lifecycle stage")
+    device: Optional[str] = Field(default="MOBILE", max_length=50, description="User device (MOBILE, DESKTOP, TABLET)")
+    payment_method: Optional[str] = Field(default="UPI", max_length=50, description="Target payment method")
+    previous_purchases: Optional[int] = Field(default=0, ge=0, le=100000)
+    previous_abandonment_count: Optional[int] = Field(default=0, ge=0, le=100000)
     risk_score: Optional[float] = Field(default=0.05, ge=0.0, le=1.0)
     dnd_enabled: Optional[bool] = Field(default=False, description="Whether customer has DND/opt-out enabled")
 
@@ -166,17 +166,17 @@ class CheckoutRecoveryResponse(BaseModel):
 
 # Phase 18: Subscription Recovery Schemas
 class SubscriptionCreateRequest(BaseModel):
-    customer_id: str
-    merchant_id: Optional[str] = "merch_razor_01"
-    plan_name: str
-    renewal_amount: float = Field(gt=0, description="Recurring renewal amount in INR")
-    billing_cycle: Optional[str] = "MONTHLY"
-    primary_method: Optional[str] = "CARD"
-    backup_method: Optional[str] = "UPI_AUTOPAY"
-    tenure_months: Optional[int] = 1
-    consecutive_successful_renewals: Optional[int] = 0
-    risk_score: Optional[float] = 0.03
-    dnd_enabled: Optional[bool] = False
+    customer_id: str = Field(max_length=128)
+    merchant_id: Optional[str] = Field(default="merch_razor_01", max_length=128)
+    plan_name: str = Field(max_length=128)
+    renewal_amount: float = Field(gt=0, le=10000000, description="Recurring renewal amount in INR")
+    billing_cycle: Optional[str] = Field(default="MONTHLY", max_length=50)
+    primary_method: Optional[str] = Field(default="CARD", max_length=50)
+    backup_method: Optional[str] = Field(default="UPI_AUTOPAY", max_length=50)
+    tenure_months: Optional[int] = Field(default=1, ge=0, le=1200)
+    consecutive_successful_renewals: Optional[int] = Field(default=0, ge=0, le=100000)
+    risk_score: Optional[float] = Field(default=0.03, ge=0.0, le=1.0)
+    dnd_enabled: Optional[bool] = Field(default=False)
 
 
 class SubscriptionEventRequest(BaseModel):
