@@ -17,12 +17,12 @@ def get_engine(url: str | None = None):
     db_url = url or settings.DATABASE_URL
     connect_args: dict[str, Any] = {}
     if db_url.startswith("sqlite"):
-        connect_args = {"check_same_thread": False}
+        connect_args = {"check_same_thread": False, "timeout": 15}
         return create_engine(db_url, pool_pre_ping=True, connect_args=connect_args)
     try:
         return create_engine(db_url, pool_pre_ping=True, connect_args=connect_args)
     except (ImportError, ModuleNotFoundError, Exception):
-        return create_engine("sqlite:///./razorrecover.db", pool_pre_ping=True, connect_args={"check_same_thread": False})
+        return create_engine("sqlite:///./razorrecover.db", pool_pre_ping=True, connect_args={"check_same_thread": False, "timeout": 15})
 
 
 engine = get_engine()

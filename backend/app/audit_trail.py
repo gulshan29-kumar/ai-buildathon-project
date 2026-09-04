@@ -153,6 +153,43 @@ class AuditTrail:
 
         return True
 
+    def get_all_events(
+        self,
+        transaction_id: Optional[str] = None,
+        actor: Optional[str] = None,
+        event_type: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Retrieves paginated audit events across all transactions with filtering."""
+        filtered = self._events
+        if transaction_id:
+            filtered = [e for e in filtered if e.transaction_id == transaction_id]
+        if actor:
+            filtered = [e for e in filtered if e.actor.upper() == actor.upper()]
+        if event_type:
+            filtered = [e for e in filtered if e.event_type.upper() == event_type.upper()]
+
+        # Sort descending by timestamp
+        sorted_events = sorted(filtered, key=lambda e: e.timestamp, reverse=True)
+        paged = sorted_events[offset : offset + limit]
+        actors = sorted(list({e.actor for e in self._events}))
+
+        return {
+            "total": len(sorted_events),
+            "limit": limit,
+            "offset": offset,
+            "actors": actors,
+            "events": [e.to_dict() for e in paged],
+        }
+
+    def verify_all_integrity(self) -> bool:
+        """Verifies cryptographic integrity across every transaction chain."""
+        for tx_id in self._by_transaction:
+            if not self.verify_integrity(tx_id):
+                return False
+        return True
+
     def clear(self) -> None:
         """Resets the audit registry (primarily for test isolation)."""
         self._events.clear()

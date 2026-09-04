@@ -110,12 +110,37 @@ class DashboardMetricsResponse(BaseModel):
     ai_uplift_percentage: float
     by_failure_category: Dict[str, int]
     by_recovery_action: Dict[str, int]
+    revenue_at_risk: Optional[float] = None
+    recoverable_revenue: Optional[float] = None
+    revenue_recovered: Optional[float] = None
+    failed_payments_count: Optional[int] = None
+    abandoned_checkouts_count: Optional[int] = None
+    active_recoveries_count: Optional[int] = None
+    escalations_count: Optional[int] = None
+    revenue_over_time: Optional[List[Dict[str, Any]]] = None
+    baseline_vs_ai: Optional[Dict[str, Any]] = None
+    recovery_probability_distribution: Optional[List[Dict[str, Any]]] = None
 
 
 class SimulationRunRequest(BaseModel):
-    transaction_count: int = Field(default=20, ge=1, le=500, description="Number of transactions to simulate")
+    transaction_count: int = Field(default=50, ge=1, le=1000, description="Number of transactions to simulate")
     seed: int = Field(default=42, description="Random seed for deterministic reproduction")
     scenario: Optional[str] = Field(default="mixed_failures", description="Simulation scenario type")
+
+
+class SimulationComparisonMetrics(BaseModel):
+    total_transactions: int
+    failed_transactions: int
+    recoverable_opportunities: int
+    revenue_at_risk: float
+    recovered_revenue: float
+    recovered_count: int
+    recovery_rate: float
+    average_recovery_time_ms: float
+    retry_attempts: int
+    blocked_actions: int
+    escalations: int
+    unnecessary_intervention_rate: float
 
 
 class SimulationRunResponse(BaseModel):
@@ -126,6 +151,17 @@ class SimulationRunResponse(BaseModel):
     recovered_revenue: float
     recovery_rate: float
     status: str
+    created_at: Optional[str] = None
+    scenario: Optional[str] = None
+    total_transactions: Optional[int] = None
+    failed_transactions: Optional[int] = None
+    recoverable_opportunities: Optional[int] = None
+    revenue_at_risk: Optional[float] = None
+    baseline_metrics: Optional[SimulationComparisonMetrics] = None
+    ai_metrics: Optional[SimulationComparisonMetrics] = None
+    uplift: Optional[Dict[str, Any]] = None
+    category_breakdown: Optional[Dict[str, Any]] = None
+    ai_actions_distribution: Optional[Dict[str, int]] = None
     transactions: List[Dict[str, Any]] = []
 
 

@@ -181,8 +181,68 @@ class RecoveryPredictor:
             "predicted_label": 1 if prob >= 0.5 else 0,
         }
 
+    def predict_batch(self, transactions: List[Dict[str, Any]]) -> List[float]:
+        """Vectorized batch prediction for high-throughput simulations."""
+        if not transactions:
+            return []
+
+        feature_dicts = []
+        for t in transactions:
+            amount = float(t.get("amount", 1000.0))
+            payment_method = str(t.get("payment_method", "UPI")).upper()
+            gateway = str(t.get("gateway", "GATEWAY_A")).upper()
+            failure_code = str(t.get("failure_code") or t.get("failure_type") or "GATEWAY_TIMEOUT").upper()
+            failure_category = str(t.get("failure_category", "TEMPORARY")).upper()
+            attempt_number = int(t.get("attempt_number", 1))
+
+            cust_txns = int(t.get("customer_transaction_count", t.get("total_transactions", 10)))
+            cust_success_rate = float(t.get("customer_success_rate", t.get("success_rate", 0.85)))
+            cust_avg_amount = float(t.get("customer_average_transaction", t.get("average_transaction_amount", amount)))
+            preferred_method = str(t.get("preferred_payment_method", payment_method)).upper()
+            hist_failures = int(t.get("historical_failure_count", t.get("failed_transactions", 1)))
+
+            risk_score = float(t.get("risk_score", 0.15))
+            checkout_duration = float(t.get("checkout_duration", 120.0))
+            device_type = str(t.get("device_type", "MOBILE")).upper()
+            hour = int(t.get("hour", 14))
+
+            feature_dicts.append({
+                "amount": amount,
+                "payment_method": payment_method,
+                "gateway": gateway,
+                "failure_category": failure_category,
+                "failure_code": failure_code,
+                "attempt_number": attempt_number,
+                "customer_transaction_count": cust_txns,
+                "customer_success_rate": cust_success_rate,
+                "customer_average_transaction": cust_avg_amount,
+                "preferred_payment_method": preferred_method,
+                "risk_score": risk_score,
+                "checkout_duration": checkout_duration,
+                "device_type": device_type,
+                "hour": hour,
+                "historical_failure_count": hist_failures,
+            })
+
+        df = pd.DataFrame(feature_dicts)
+        if self.bundle and "calibrated_model" in self.bundle and "preprocessor" in self.bundle:
+            preprocessor = self.bundle["preprocessor"]
+            model = self.bundle["calibrated_model"]
+            X_proc = preprocessor.transform(df)
+            probs = model.predict_proba(X_proc)[:, 1]
+            return [round(float(p), 4) for p in probs]
+
+        return [round(float(np.clip(0.65 - 0.3 * d["risk_score"], 0.01, 0.99)), 4) for d in feature_dicts]
+
 
 def predict_recovery_probability(transaction: Dict[str, Any]) -> Dict[str, Any]:
     """Top-level prediction entrypoint for recovery probability prediction."""
     predictor = RecoveryPredictor.get_instance()
     return predictor.predict(transaction)
+
+
+def predict_batch_recovery_probabilities(transactions: List[Dict[str, Any]]) -> List[float]:
+    """Top-level batch prediction entrypoint for high-speed simulation."""
+    predictor = RecoveryPredictor.get_instance()
+    return predictor.predict_batch(transactions)
+

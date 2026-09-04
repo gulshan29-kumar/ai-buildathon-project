@@ -45,4 +45,12 @@ models/*.joblib
 # Build artifacts
 build/
 dist/
+*.tsbuildinfo
+
+# Databases & Runtime Simulation Output
+*.sqlite
+*.sqlite3
+*.db
+backend/data/simulations/*.json
+!backend/data/simulations/.gitkeep
 
