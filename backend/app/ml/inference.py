@@ -9,7 +9,32 @@ import numpy as np
 import pandas as pd
 
 
-DEFAULT_MODEL_PATH = os.getenv("MODEL_PATH", "models/recovery_model.joblib")
+def find_model_path(custom_path: Optional[str] = None) -> str:
+    """Resolves the model bundle path across relative and absolute deployment locations."""
+    if custom_path and os.path.exists(custom_path):
+        return custom_path
+
+    env_path = os.getenv("MODEL_PATH")
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    candidates = [
+        "models/recovery_model.joblib",
+        "../models/recovery_model.joblib",
+        "../../models/recovery_model.joblib",
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "models", "recovery_model.joblib"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "models", "recovery_model.joblib"),
+        os.path.join(os.getcwd(), "models", "recovery_model.joblib"),
+    ]
+    for p in candidates:
+        norm = os.path.abspath(p)
+        if os.path.exists(norm):
+            return norm
+
+    return env_path or "models/recovery_model.joblib"
+
+
+DEFAULT_MODEL_PATH = find_model_path()
 
 CATEGORICAL_FEATURES = [
     "payment_method",
@@ -40,24 +65,27 @@ class RecoveryPredictor:
 
     _instance: Optional[RecoveryPredictor] = None
 
-    def __init__(self, model_path: str = DEFAULT_MODEL_PATH):
-        self.model_path = model_path
+    def __init__(self, model_path: Optional[str] = None):
+        self.model_path = find_model_path(model_path)
         self.bundle: Optional[Dict[str, Any]] = None
         self.load_model()
 
     @classmethod
-    def get_instance(cls, model_path: str = DEFAULT_MODEL_PATH) -> RecoveryPredictor:
-        if cls._instance is None or cls._instance.model_path != model_path:
-            cls._instance = cls(model_path=model_path)
+    def get_instance(cls, model_path: Optional[str] = None) -> RecoveryPredictor:
+        resolved = find_model_path(model_path)
+        if cls._instance is None or cls._instance.model_path != resolved:
+            cls._instance = cls(model_path=resolved)
         return cls._instance
 
     def load_model(self) -> None:
-        """Loads serialized XGBoost model bundle from disk."""
-        if os.path.exists(self.model_path):
+        """Loads serialized XGBoost model bundle from disk with cold-start resilience."""
+        resolved = find_model_path(self.model_path)
+        if os.path.exists(resolved):
             try:
-                self.bundle = joblib.load(self.model_path)
+                self.bundle = joblib.load(resolved)
+                self.model_path = resolved
             except Exception as e:
-                print(f"Warning: Failed to load model from {self.model_path}: {e}")
+                print(f"Warning: Failed to load model from {resolved}: {e}")
                 self.bundle = None
         else:
             self.bundle = None

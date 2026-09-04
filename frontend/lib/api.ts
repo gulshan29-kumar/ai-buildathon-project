@@ -1,6 +1,24 @@
-// RazorRecover AI Frontend API Client & Domain Models
+const getApiBase = (): string => {
+  // If explicitly configured to hit backend directly from client or edge
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
+  }
+  // In the browser, use relative URL to route through Next.js /api rewrite proxy
+  if (typeof window !== 'undefined') {
+    return '';
+  }
+  // On server-side rendering (SSR) in Node or Vercel Functions
+  const serverBackend =
+    process.env.BACKEND_API_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_API_URL;
+  if (serverBackend) {
+    return serverBackend.replace(/\/+$/, '');
+  }
+  // Local development fallback
+  return process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:8000';
+};
 
-const API_BASE = typeof window !== 'undefined' ? '' : (process.env.BACKEND_API_URL || 'http://127.0.0.1:8000');
+const API_BASE = getApiBase();
 
 export interface DashboardMetrics {
   total_failed_volume: number;

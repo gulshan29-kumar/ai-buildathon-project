@@ -13,16 +13,37 @@ class Base(DeclarativeBase):
     pass
 
 
+def normalize_database_url(url: str | None) -> str:
+    """Normalize database connection URLs for SQLAlchemy and cloud providers (Neon, Supabase, Railway)."""
+    if not url:
+        return "sqlite:///./razorrecover.db"
+    clean_url = url.strip()
+    # Cloud providers often supply postgres:// instead of postgresql://
+    if clean_url.startswith("postgres://"):
+        clean_url = clean_url.replace("postgres://", "postgresql://", 1)
+    return clean_url
+
+
 def get_engine(url: str | None = None):
-    db_url = url or settings.DATABASE_URL
+    db_url = normalize_database_url(url or settings.DATABASE_URL)
     connect_args: dict[str, Any] = {}
     if db_url.startswith("sqlite"):
         connect_args = {"check_same_thread": False, "timeout": 15}
         return create_engine(db_url, pool_pre_ping=True, connect_args=connect_args)
     try:
-        return create_engine(db_url, pool_pre_ping=True, connect_args=connect_args)
+        # PostgreSQL with cloud pooling configuration
+        return create_engine(
+            db_url,
+            pool_pre_ping=True,
+            pool_recycle=300,
+            connect_args=connect_args,
+        )
     except (ImportError, ModuleNotFoundError, Exception):
-        return create_engine("sqlite:///./razorrecover.db", pool_pre_ping=True, connect_args={"check_same_thread": False, "timeout": 15})
+        return create_engine(
+            "sqlite:///./razorrecover.db",
+            pool_pre_ping=True,
+            connect_args={"check_same_thread": False, "timeout": 15},
+        )
 
 
 engine = get_engine()
