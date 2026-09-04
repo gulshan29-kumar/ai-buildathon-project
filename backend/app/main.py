@@ -80,6 +80,24 @@ from backend.app.security import (
     get_rate_limiter,
     verify_api_key,
 )
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
+
+from backend.app.failure_handler import (
+    AgentTimeoutError,
+    AlreadySuccessfulPaymentError,
+    ConcurrentRecoveryError,
+    CustomerNotFoundError,
+    DatabaseUnavailableError,
+    InvalidPaymentMethodError,
+    MalformedEventError,
+    PendingPaymentUncertainStateError,
+    ResilienceError,
+    SafeRecoveryGuard,
+    SimulatorExecutionError,
+    TransactionNotFoundError,
+    UncertainPaymentStateError,
+    get_concurrent_recovery_manager,
+)
 
 # Configure structured application logger with automatic PII & secret scrubbing
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -112,9 +130,10 @@ orchestrator = RecoveryOrchestrator(tools=agent_tools)
 root_cause_agent = RootCauseAgent()
 audit_trail = AuditTrail.get_instance()
 
-# Security & Idempotency Singletons
+# Security & Concurrency Singletons
 idempotency_mgr = get_idempotency_manager()
 rate_limiter = get_rate_limiter()
+concurrent_recovery_mgr = get_concurrent_recovery_manager()
 
 idempotency_store: Dict[str, Dict[str, Any]] = {}
 simulation_runs_store: Dict[str, Dict[str, Any]] = {}
@@ -284,6 +303,126 @@ async def policy_blocked_handler(request: Request, exc: PolicyBlockedExecutionEr
     return JSONResponse(
         status_code=403,
         content={"error": "POLICY_BLOCKED", "detail": str(exc), "status_code": 403},
+    )
+
+
+@app.exception_handler(DatabaseUnavailableError)
+async def database_unavailable_handler(request: Request, exc: DatabaseUnavailableError) -> JSONResponse:
+    logger.error(f"Database unavailable on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={"error": "DATABASE_UNAVAILABLE", "detail": str(exc), "status_code": 503},
+    )
+
+
+@app.exception_handler(OperationalError)
+async def operational_error_handler(request: Request, exc: OperationalError) -> JSONResponse:
+    logger.error(f"Database operational error on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "DATABASE_UNAVAILABLE",
+            "detail": "Database connection failed or is temporarily unavailable. Operations safely suspended to protect state consistency.",
+            "status_code": 503,
+        },
+    )
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    logger.error(f"Database error on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "DATABASE_UNAVAILABLE",
+            "detail": "Database service error occurred. Operations safely halted.",
+            "status_code": 503,
+        },
+    )
+
+
+@app.exception_handler(AlreadySuccessfulPaymentError)
+async def already_successful_handler(request: Request, exc: AlreadySuccessfulPaymentError) -> JSONResponse:
+    logger.warning(f"Recovery rejected for already settled transaction: {exc}")
+    return JSONResponse(
+        status_code=400,
+        content={"error": "PAYMENT_ALREADY_SUCCESSFUL", "detail": str(exc), "status_code": 400},
+    )
+
+
+@app.exception_handler(PendingPaymentUncertainStateError)
+async def pending_payment_uncertain_handler(request: Request, exc: PendingPaymentUncertainStateError) -> JSONResponse:
+    logger.info(f"Recovery halted for pending settlement: {exc}")
+    return JSONResponse(
+        status_code=409,
+        content={"error": "PAYMENT_PENDING_WAIT", "detail": str(exc), "status_code": 409},
+    )
+
+
+@app.exception_handler(UncertainPaymentStateError)
+async def uncertain_payment_state_handler(request: Request, exc: UncertainPaymentStateError) -> JSONResponse:
+    logger.warning(f"Uncertain payment state encountered: {exc}")
+    return JSONResponse(
+        status_code=409,
+        content={"error": "UNCERTAIN_PAYMENT_STATE", "detail": str(exc), "status_code": 409},
+    )
+
+
+@app.exception_handler(TransactionNotFoundError)
+async def transaction_not_found_handler(request: Request, exc: TransactionNotFoundError) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={"error": "TRANSACTION_NOT_FOUND", "detail": str(exc), "status_code": 404},
+    )
+
+
+@app.exception_handler(CustomerNotFoundError)
+async def customer_not_found_handler(request: Request, exc: CustomerNotFoundError) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={"error": "CUSTOMER_NOT_FOUND", "detail": str(exc), "status_code": 404},
+    )
+
+
+@app.exception_handler(ConcurrentRecoveryError)
+async def concurrent_recovery_handler(request: Request, exc: ConcurrentRecoveryError) -> JSONResponse:
+    logger.warning(f"Concurrent recovery attempt blocked on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=409,
+        content={"error": "CONCURRENT_RECOVERY_IN_PROGRESS", "detail": str(exc), "status_code": 409},
+    )
+
+
+@app.exception_handler(AgentTimeoutError)
+async def agent_timeout_handler(request: Request, exc: AgentTimeoutError) -> JSONResponse:
+    logger.error(f"Agent execution timeout on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=504,
+        content={"error": "AGENT_TIMEOUT", "detail": str(exc), "status_code": 504},
+    )
+
+
+@app.exception_handler(MalformedEventError)
+async def malformed_event_handler(request: Request, exc: MalformedEventError) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={"error": "MALFORMED_EVENT", "detail": str(exc), "status_code": 400},
+    )
+
+
+@app.exception_handler(InvalidPaymentMethodError)
+async def invalid_payment_method_handler(request: Request, exc: InvalidPaymentMethodError) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={"error": "INVALID_PAYMENT_METHOD", "detail": str(exc), "status_code": 400},
+    )
+
+
+@app.exception_handler(SimulatorExecutionError)
+async def simulator_execution_handler(request: Request, exc: SimulatorExecutionError) -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={"error": "SIMULATOR_FAILURE", "detail": str(exc), "status_code": 502},
     )
 
 
@@ -509,54 +648,64 @@ def run_recovery_for_transaction(
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
 ) -> RecoveryRunResponse:
-    """Executes the Agentic Recovery Orchestrator on a specific transaction with rate limiting and idempotency."""
+    """Executes the Agentic Recovery Orchestrator on a specific transaction with rate limiting, concurrency locking, and idempotency."""
     # 1. Rate Limiting (30 req/min for agent orchestrator)
     client_id = request.client.host if request.client else "unknown"
     rate_limiter.enforce(identifier=f"recovery:{client_id}", limit=30, window_seconds=60)
 
-    # 2. Idempotency Check
-    idem_key = idempotency_key or x_idempotency_key
-    if idem_key:
-        cached = idempotency_mgr.start_request(idem_key, {"transaction_id": transaction_id})
-        if cached:
-            return RecoveryRunResponse(**cached[1])
-
-    payment = simulator.payments.get(transaction_id)
-    if not payment:
+    # 2. Concurrency Lock: block concurrent recovery executions on the same transaction
+    with concurrent_recovery_mgr.guard(transaction_id):
+        # 3. Idempotency Check
+        idem_key = idempotency_key or x_idempotency_key
         if idem_key:
-            idempotency_mgr.fail_request(idem_key)
-        raise HTTPException(
-            status_code=404,
-            detail=f"Transaction '{transaction_id}' not found; cannot execute recovery.",
-        )
+            cached = idempotency_mgr.start_request(idem_key, {"transaction_id": transaction_id})
+            if cached:
+                return RecoveryRunResponse(**cached[1])
 
-    # Execute orchestrator
-    result = orchestrator.run(dict(payment))
+        # 4. Lookup Transaction
+        payment = simulator.payments.get(transaction_id)
+        if not payment:
+            if idem_key:
+                idempotency_mgr.fail_request(idem_key)
+            raise TransactionNotFoundError(
+                f"Transaction '{transaction_id}' not found; cannot execute recovery."
+            )
 
-    # Compute expected recovery value
-    selected_act = result.get("selected_action", "STOP")
-    probs = result.get("action_probabilities", {})
-    prob = float(probs.get(selected_act, 0.0))
-    amt = float(payment.get("amount", 0.0))
-    ev = round(amt * prob, 2)
+        # 5. Assert Recoverable Status (fails safely on SUCCESS or PENDING)
+        try:
+            SafeRecoveryGuard.assert_recoverable_status(payment)
+        except ResilienceError:
+            if idem_key:
+                idempotency_mgr.fail_request(idem_key)
+            raise
 
-    recovery_payload = {
-        "transaction_id": transaction_id,
-        "selected_action": selected_act,
-        "monitoring_outcome": result.get("monitoring_outcome", "STOP"),
-        "recovery_probability": prob,
-        "expected_recovery_value": ev,
-        "execution_result": result.get("execution_result", {}),
-        "policy_decision": result.get("policy_decision", {}),
-        "errors": result.get("errors", []),
-    }
-    recovery_results_store[transaction_id] = recovery_payload
+        # 6. Execute orchestrator
+        result = orchestrator.run(dict(payment))
 
-    if idem_key:
-        idempotency_mgr.complete_request(idem_key, 200, recovery_payload)
+        # Compute expected recovery value
+        selected_act = result.get("selected_action", "STOP")
+        probs = result.get("action_probabilities", {})
+        prob = float(probs.get(selected_act, 0.0))
+        amt = float(payment.get("amount", 0.0))
+        ev = round(amt * prob, 2)
 
-    logger.info(f"Recovery executed for {transaction_id}: action={selected_act}, outcome={result.get('monitoring_outcome')}")
-    return RecoveryRunResponse(**recovery_payload)
+        recovery_payload = {
+            "transaction_id": transaction_id,
+            "selected_action": selected_act,
+            "monitoring_outcome": result.get("monitoring_outcome", "STOP"),
+            "recovery_probability": prob,
+            "expected_recovery_value": ev,
+            "execution_result": result.get("execution_result", {}),
+            "policy_decision": result.get("policy_decision", {}),
+            "errors": result.get("errors", []),
+        }
+        recovery_results_store[transaction_id] = recovery_payload
+
+        if idem_key:
+            idempotency_mgr.complete_request(idem_key, 200, recovery_payload)
+
+        logger.info(f"Recovery executed for {transaction_id}: action={selected_act}, outcome={result.get('monitoring_outcome')}")
+        return RecoveryRunResponse(**recovery_payload)
 
 
 @app.get("/api/recovery/{transaction_id}")
@@ -1073,6 +1222,7 @@ def simulate_retry(payload: Dict[str, Any]) -> Dict[str, Any]:
 def simulate_switch(payload: Dict[str, Any]) -> Dict[str, Any]:
     txn_id = payload.get("transaction_id", "")
     method = payload.get("new_payment_method", "UPI")
+    SafeRecoveryGuard.validate_payment_method(method)
     try:
         return simulator.switch_payment_method(txn_id, new_payment_method=method)
     except PolicyBlockedExecutionError as e:

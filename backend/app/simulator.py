@@ -270,6 +270,13 @@ class StatefulPaymentSimulator:
 
     def switch_payment_method(self, transaction_id: str, new_payment_method: str) -> Dict[str, Any]:
         """Switches payment instrument and attempts payment recovery."""
+        new_method_upper = str(new_payment_method or "").upper().strip()
+        if new_method_upper not in {"UPI", "CARD", "NETBANKING", "WALLET"}:
+            from backend.app.failure_handler import InvalidPaymentMethodError
+            raise InvalidPaymentMethodError(
+                f"Payment method '{new_payment_method}' is unauthorized. Allowed: ['CARD', 'NETBANKING', 'UPI', 'WALLET']"
+            )
+
         payment = self.payments.get(transaction_id)
         if not payment:
             raise KeyError(f"Transaction '{transaction_id}' not found in simulator.")
@@ -286,7 +293,7 @@ class StatefulPaymentSimulator:
             )
 
         old_method = payment["payment_method"]
-        payment["payment_method"] = new_payment_method.upper()
+        payment["payment_method"] = new_method_upper
         payment["attempt_number"] = payment.get("attempt_number", 1) + 1
 
         self._record_event(

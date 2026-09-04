@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, TypedDict
@@ -13,6 +14,12 @@ from backend.app.action_predictor import (
 from backend.app.audit_trail import AuditTrail
 from backend.app.decision_engine import DecisionEngine
 from backend.app.failure_classifier import FailureClassifier
+from backend.app.failure_handler import (
+    AgentTimeoutError,
+    MalformedEventError,
+    SafeRecoveryGuard,
+    UncertainPaymentStateError,
+)
 from backend.app.policy_engine import PolicyDecision, PolicyEngine
 from backend.app.security.safe_tools import (
     InvalidToolParameterError,
@@ -50,6 +57,8 @@ class RecoveryAgentState(TypedDict, total=False):
     monitoring_outcome: str  # RECOVERED, NEXT_ACTION, WAIT, STOP, ESCALATE
     step_count: int
     max_steps: int
+    execution_timeout: Optional[float]
+    uncertain_payment_state: bool
     llm_enabled: bool
     fallback_mode: bool
     llm_response: Optional[str]
@@ -81,6 +90,9 @@ class AgentTools:
 
     def get_customer_context(self, customer_id: str) -> Dict[str, Any]:
         """Tool 2: Retrieve customer context and preferences."""
+        cid = str(customer_id or "").strip()
+        if not cid or cid in ("anonymous", "unknown", "missing", "cust_missing") or cid.startswith("missing_") or cid.startswith("unknown_"):
+            return SafeRecoveryGuard.get_safe_fallback_customer(cid or "anonymous")
         return {
             "customer_id": customer_id,
             "preferred_payment_method": "UPI",
@@ -204,6 +216,7 @@ class RecoveryOrchestrator:
         tools: Optional[AgentTools] = None,
         llm_client: Optional[Callable[[str], str]] = None,
         max_steps: int = 10,
+        execution_timeout: Optional[float] = 15.0,
     ):
         self.tools = tools or AgentTools()
         self.decision_engine = DecisionEngine(
@@ -212,27 +225,41 @@ class RecoveryOrchestrator:
         )
         self.llm_client = llm_client
         self.max_steps = max_steps
+        self.execution_timeout = execution_timeout
         self.compiled_graph = self._build_graph() if LANGGRAPH_AVAILABLE else None
 
     # --- Node Handlers ---
 
     def node_event(self, state: RecoveryAgentState) -> RecoveryAgentState:
-        """Node 1: EVENT - Normalize event and setup orchestrator state."""
+        """Node 1: EVENT - Normalize event, validate integrity, and setup orchestrator state."""
         event = dict(state.get("event") or {})
+
+        # Validate event structure and limits
+        try:
+            SafeRecoveryGuard.validate_event_payload(event)
+        except MalformedEventError as e:
+            logger.warning(f"Malformed event payload rejected in orchestrator: {e}")
+            state.setdefault("errors", []).append(f"Malformed event: {e}")
+
         txn_id = str(event.get("transaction_id") or event.get("id") or f"txn_{uuid.uuid4().hex[:8]}")
         state["transaction_id"] = txn_id
         state["errors"] = state.get("errors", [])
         state["logs"] = state.get("logs", [])
         state["fallback_mode"] = state.get("fallback_mode", False)
 
+        # Detect uncertain payment state
+        is_uncertain = SafeRecoveryGuard.is_uncertain_state(
+            event.get("status", ""), event.get("failure_code")
+        )
+        state["uncertain_payment_state"] = is_uncertain
 
-        state["logs"].append({"node": "EVENT", "message": f"Ingested event for {txn_id}", "timestamp": datetime.now(timezone.utc).isoformat()})
-        self.tools.log_audit_event("ORCHESTRATOR_EVENT_INGESTED", txn_id, {"event": event})
+        state["logs"].append({"node": "EVENT", "message": f"Ingested event for {txn_id} (uncertain={is_uncertain})", "timestamp": datetime.now(timezone.utc).isoformat()})
+        self.tools.log_audit_event("ORCHESTRATOR_EVENT_INGESTED", txn_id, {"event": event, "uncertain": is_uncertain})
         AuditTrail.get_instance().log_event(
             transaction_id=txn_id,
-            event_type="PAYMENT_FAILED",
+            event_type="PAYMENT_FAILED" if not is_uncertain else "PAYMENT_UNCERTAIN",
             actor="SIMULATOR",
-            input_summary={"amount": event.get("amount"), "failure_code": event.get("failure_code"), "status": "FAILED"},
+            input_summary={"amount": event.get("amount"), "failure_code": event.get("failure_code"), "status": event.get("status", "FAILED")},
         )
         return state
 
@@ -247,10 +274,12 @@ class RecoveryOrchestrator:
                 txn = self.tools.get_transaction(txn_id)
                 if txn.get("status") == "UNKNOWN":
                     ev = state.get("event", {})
-                    # If already SUCCESS or HIGH_RISK, initialize as dictionary record
-                    if ev.get("status") == "SUCCESS":
+                    # If already SUCCESS, PENDING, or HIGH_RISK, initialize as dictionary record
+                    if ev.get("status") in ("SUCCESS", "PENDING", "PROCESSING") or ev.get("failure_code") == "PAYMENT_PENDING":
                         txn = dict(ev)
                         txn["transaction_id"] = txn_id
+                        if "status" not in txn or not txn["status"]:
+                            txn["status"] = "PENDING"
                     elif float(ev.get("risk_score", 0.05)) > 0.85 or ev.get("failure_code") == "HIGH_RISK":
                         txn = dict(ev)
                         txn["transaction_id"] = txn_id
@@ -270,6 +299,10 @@ class RecoveryOrchestrator:
                 txn["transaction_id"] = txn_id
 
         state["transaction"] = txn
+
+        # Check transaction state for uncertain settlement
+        if txn and SafeRecoveryGuard.is_uncertain_state(txn.get("status", ""), txn.get("failure_code")):
+            state["uncertain_payment_state"] = True
 
         cust_id = str(txn.get("customer_id") or "cust_default")
         state["customer_context"] = state.get("customer_context") or self.tools.get_customer_context(cust_id)
@@ -432,6 +465,32 @@ class RecoveryOrchestrator:
         txn_id = state["transaction_id"]
         params = state.get("action_parameters", {})
 
+        # CRITICAL SAFETY INVARIANT: "If payment state is uncertain: DO NOT RETRY."
+        if state.get("uncertain_payment_state"):
+            if act in ("RETRY_PAYMENT", "SWITCH_PAYMENT_METHOD"):
+                logger.warning(
+                    f"[UNCERTAIN STATE GUARD] Prohibiting '{act}' for transaction '{txn_id}' because payment state is uncertain."
+                )
+                state["errors"].append(
+                    f"Payment state is uncertain; automated action '{act}' prohibited by platform safety invariant."
+                )
+                state["execution_result"] = {
+                    "transaction_id": txn_id,
+                    "action": "WAIT_AND_POLL",
+                    "status": "HALTED_UNCERTAIN_STATE",
+                    "reason": "Payment state is uncertain. Action halted to prevent double-charging (Rule POL-007).",
+                    "simulated": True,
+                }
+                state["monitoring_outcome"] = "WAIT"
+                AuditTrail.get_instance().log_event(
+                    transaction_id=txn_id,
+                    event_type="UNCERTAIN_STATE_INTERCEPTED",
+                    actor="POLICY_ENGINE",
+                    selected_action="WAIT_AND_POLL",
+                    execution_result=state["execution_result"],
+                )
+                return state
+
         # CRITICAL SAFETY: Validate policy again right before execution
         txn = state.get("transaction", {})
         cust = state.get("customer_context", {})
@@ -459,6 +518,9 @@ class RecoveryOrchestrator:
             state["errors"].append(f"Policy denied execution: {e}")
             state["execution_result"] = {"error": "POLICY_BLOCKED", "detail": str(e), "simulated": True}
         except Exception as e:
+            logger.error(f"Simulator execution failed for {txn_id}: {e}", exc_info=True)
+            # Simulator failed -> Payment state becomes uncertain! DO NOT RETRY!
+            state["uncertain_payment_state"] = True
             state["errors"].append(f"Simulator execution failure: {e}")
             state["execution_result"] = {"error": "SIMULATOR_FAILURE", "detail": str(e), "simulated": True}
 
@@ -475,10 +537,17 @@ class RecoveryOrchestrator:
     def node_monitor_result(self, state: RecoveryAgentState) -> RecoveryAgentState:
         """Node 9: MONITOR_RESULT - Evaluates outcome (RECOVERED, NEXT_ACTION, WAIT, STOP, ESCALATE)."""
         res = state.get("execution_result", {})
-
         act = state.get("selected_action", "STOP")
 
-        if res.get("error") == "POLICY_BLOCKED":
+        if state.get("uncertain_payment_state"):
+            # Never transition to NEXT_ACTION or re-retry if state is uncertain!
+            if res.get("status") == "SUCCESS":
+                state["monitoring_outcome"] = "RECOVERED"
+            elif act in ("WAIT_AND_POLL", "SCHEDULE_RETRY") or res.get("action") == "WAIT_AND_POLL":
+                state["monitoring_outcome"] = "WAIT"
+            else:
+                state["monitoring_outcome"] = "ESCALATE"
+        elif res.get("error") == "POLICY_BLOCKED":
             state["monitoring_outcome"] = "STOP"
         elif res.get("error") == "SIMULATOR_FAILURE":
             state["monitoring_outcome"] = "ESCALATE"
@@ -587,10 +656,15 @@ class RecoveryOrchestrator:
 
     def run(self, event: Dict[str, Any], **kwargs) -> RecoveryAgentState:
         """Executes orchestration via LangGraph when available or deterministic engine as fallback."""
+        start_time = time.monotonic()
+        timeout = kwargs.get("execution_timeout", self.execution_timeout)
+
         initial_state: RecoveryAgentState = {
             "event": event,
             "transaction_id": str(event.get("transaction_id") or event.get("id") or f"txn_{uuid.uuid4().hex[:8]}"),
             "max_steps": kwargs.get("max_steps", self.max_steps),
+            "execution_timeout": timeout,
+            "uncertain_payment_state": False,
             "llm_enabled": kwargs.get("llm_enabled", bool(self.llm_client)),
             "fallback_mode": kwargs.get("fallback_mode", False),
             "step_count": 0,
@@ -616,6 +690,28 @@ class RecoveryOrchestrator:
         state = self.node_ml_prediction(state)
 
         while state.get("step_count", 0) < state.get("max_steps", self.max_steps):
+            # Check execution timeout
+            if timeout and (time.monotonic() - start_time) > timeout:
+                logger.warning(
+                    f"Agent run for transaction {state['transaction_id']} exceeded timeout limit of {timeout}s."
+                )
+                state["errors"].append(f"Agent execution exceeded timeout of {timeout}s.")
+                state["monitoring_outcome"] = "STOP"
+                state["selected_action"] = "STOP"
+                state["execution_result"] = {
+                    "error": "AGENT_TIMEOUT",
+                    "detail": f"Agent execution exceeded timeout of {timeout}s. Safely halted without retry.",
+                    "status": "TIMED_OUT",
+                    "simulated": True,
+                }
+                AuditTrail.get_instance().log_event(
+                    transaction_id=state["transaction_id"],
+                    event_type="AGENT_TIMED_OUT",
+                    actor="ORCHESTRATOR",
+                    execution_result=state["execution_result"],
+                )
+                break
+
             state = self.node_action_analysis(state)
             state = self.node_policy_check(state)
             state = self.node_decision(state)
