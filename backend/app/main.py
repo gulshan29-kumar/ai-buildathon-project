@@ -25,6 +25,7 @@ from backend.app.abandonment_recovery import (
     CheckoutSessionState,
     CheckoutSessionStore,
 )
+from backend.app.curated_scenarios import curated_scenario_engine
 from backend.app.audit_trail import AuditTrail
 from backend.app.config import settings
 from backend.app.database import get_db
@@ -1537,3 +1538,53 @@ def recover_subscription_payment(
         idempotency_mgr.complete_request(idem_key, 200, result)
 
     return result
+
+
+# =====================================================================
+# CURATED DEMO SCENARIOS API (Phase 25)
+# =====================================================================
+
+@app.get("/api/scenarios")
+def get_curated_scenarios() -> Dict[str, Any]:
+    """Retrieves summaries and metrics of all 8 curated demo scenarios."""
+    summaries = curated_scenario_engine.get_all_summaries()
+    return {
+        "scenarios": summaries,
+        "total": len(summaries),
+    }
+
+
+@app.get("/api/scenarios/{scenario_id}")
+def get_curated_scenario(scenario_id: str) -> Dict[str, Any]:
+    """Retrieves the complete 9-stage execution trace for a curated demo scenario."""
+    trace = curated_scenario_engine.get_scenario_trace(scenario_id)
+    if not trace:
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found.")
+    return trace
+
+
+@app.post("/api/scenarios/{scenario_id}/run")
+def run_curated_scenario(scenario_id: str) -> Dict[str, Any]:
+    """Deterministically executes or re-executes a single curated demo scenario."""
+    try:
+        trace = curated_scenario_engine.run_scenario(scenario_id)
+        return trace
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found.")
+
+
+@app.post("/api/scenarios/run-all")
+def run_all_curated_scenarios() -> Dict[str, Any]:
+    """Deterministically runs all 8 curated demo scenarios and returns aggregated summary & traces."""
+    return curated_scenario_engine.run_all_scenarios()
+
+
+@app.post("/api/scenarios/reset")
+def reset_curated_scenarios() -> Dict[str, Any]:
+    """Resets cached demo scenario executions to ensure strict reproducibility."""
+    summary = curated_scenario_engine.run_all_scenarios()
+    return {
+        "status": "reset_successful",
+        "summary": summary,
+    }
+

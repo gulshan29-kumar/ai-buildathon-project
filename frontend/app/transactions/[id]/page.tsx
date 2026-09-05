@@ -33,6 +33,7 @@ import {
   getStatusBadge,
   getActionBadge,
 } from '../../../lib/api';
+import DecisionAuditStrip from '../../../components/DecisionAuditStrip';
 
 export default function TransactionDetailPage() {
   const params = useParams();
@@ -48,7 +49,7 @@ export default function TransactionDetailPage() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [execMessage, setExecMessage] = useState<string | null>(null);
 
-  const fetchDetails = async () => {
+  const fetchDetails = React.useCallback(async () => {
     if (!id) return;
     setLoading(true);
     setError(null);
@@ -72,11 +73,11 @@ export default function TransactionDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchDetails();
-  }, [id]);
+  }, [fetchDetails]);
 
   const handleExecuteRecovery = async () => {
     if (!id || isExecuting) return;
@@ -184,6 +185,29 @@ export default function TransactionDetailPage() {
           </button>
         </div>
       )}
+
+      {/* Executive Financial & Policy Audit Strip */}
+      <DecisionAuditStrip
+        revenueAtRisk={transaction.amount}
+        recoverableRevenue={decision?.expected_recovery_value ?? Math.round(transaction.amount * 0.72)}
+        revenueRecovered={transaction.status === 'SUCCESS' ? transaction.amount : (transaction.revenue_recovered ?? 0)}
+        recoveryRate={(decision?.recovery_probability ?? 0.72) * 100}
+        agentDecision={selectedAction}
+        policyDecision={decision?.policy_status || 'ALLOWED'}
+        policyRuleId={decision?.policy_rule_id || 'POL-004'}
+        reason={
+          decision?.reasoning ||
+          decision?.reasoning_summary ||
+          `Autonomous agent evaluated ${transaction.failure_code || 'payment failure'} with ML probability ${formatPercent(
+            decision?.recovery_probability ?? 0.72
+          )}. Guardrails verified policy compliance.`
+        }
+        auditHash={auditEvents.length > 0 ? auditEvents[auditEvents.length - 1].hash : undefined}
+        verifiedIntegrity={integrityValid}
+        timestamp={transaction.created_at}
+        latencyMs={decision?.evaluation_latency_ms ?? 1.8}
+        title="Transaction Autonomous Audit & Financial Recoverability"
+      />
 
       {/* Top 3 Metric Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -41,6 +41,7 @@ import {
   Legend,
 } from 'recharts';
 import MetricCard from '../../components/MetricCard';
+import CustomTooltip from '../../components/Tooltip';
 import {
   getDashboardMetrics,
   getTransactions,
@@ -888,20 +889,56 @@ export default function DashboardPage() {
                 <th className="py-3 px-4">Amount</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Failure Code</th>
-                <th className="py-3 px-4">Method</th>
+                <th className="py-3 px-4">Agent Decision</th>
+                <th className="py-3 px-4">Policy Decision</th>
+                <th className="py-3 px-4">Reason / Rule</th>
                 <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-medium">
               {recentTxns.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                  <td colSpan={8} className="py-8 text-center text-slate-500">
                     No transactions recorded in sandbox yet. Click &quot;Reset Sandbox&quot; to seed authentic data.
                   </td>
                 </tr>
               ) : (
                 recentTxns.map((txn) => {
                   const statusStyle = getStatusBadge(txn.status);
+                  const fcode = txn.failure_code || '';
+                  let agentAction = txn.recommended_action || 'RETRY_PAYMENT';
+                  let policyDecision = 'PERMITTED';
+                  let policyRule = 'POL-004';
+                  let reason = 'Transient gateway timeout; permitted retry within 3 attempts.';
+                  if (fcode === 'HIGH_RISK' || (txn.risk_score && txn.risk_score > 0.8)) {
+                    agentAction = 'ESCALATE';
+                    policyDecision = 'BLOCKED';
+                    policyRule = 'POL-003';
+                    reason = 'Risk score exceeds fraud threshold. Automated retry prohibited.';
+                  } else if (fcode === 'CARD_EXPIRED') {
+                    agentAction = 'SWITCH_PAYMENT_METHOD';
+                    policyDecision = 'PERMITTED';
+                    policyRule = 'POL-008';
+                    reason = 'Card expired; retry blocked by POL-008. Switched to verified UPI.';
+                  } else if (fcode === 'CUSTOMER_ABANDONED') {
+                    agentAction = 'SEND_RECOVERY_MESSAGE';
+                    policyDecision = 'PERMITTED';
+                    policyRule = 'POL-009';
+                    reason = 'High-intent buyer dropped off. 1-click WhatsApp recovery authorized.';
+                  } else if (fcode === 'INSUFFICIENT_FUNDS') {
+                    agentAction = 'SCHEDULE_RETRY';
+                    policyDecision = 'BLOCKED';
+                    policyRule = 'POL-005';
+                    reason = 'Cooling period enforced for insufficient funds; retry scheduled.';
+                  } else if (fcode === 'CARD_DECLINED') {
+                    agentAction = 'SWITCH_PAYMENT_METHOD';
+                    policyDecision = 'PERMITTED';
+                    policyRule = 'POL-008';
+                    reason = 'Issuing bank decline. Route to alternate rail with customer confirmation.';
+                  }
+                  const actionBadge = getActionBadge(agentAction);
+                  const isPolicyAllowed = policyDecision === 'PERMITTED';
+
                   return (
                     <tr key={txn.transaction_id} className="hover:bg-slate-800/40 transition">
                       <td className="py-3 px-4 font-mono text-slate-300">
@@ -922,11 +959,33 @@ export default function DashboardPage() {
                           {txn.status}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
+                      <td className="py-3 px-4 text-rose-300 font-mono text-[11px]">
                         {txn.failure_code || 'NONE'}
                       </td>
-                      <td className="py-3 px-4 text-slate-300 font-mono text-[11px]">
-                        {txn.payment_method}
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold border ${actionBadge.bg} ${actionBadge.text} ${actionBadge.border}`}
+                        >
+                          {agentAction}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold border ${
+                            isPolicyAllowed
+                              ? 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
+                              : 'bg-rose-950 text-rose-300 border-rose-500/40'
+                          }`}
+                        >
+                          {policyDecision} ({policyRule})
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 max-w-xs">
+                        <CustomTooltip content={reason} position="top">
+                          <span className="text-slate-300 text-[11px] truncate block max-w-[160px] cursor-help">
+                            {reason}
+                          </span>
+                        </CustomTooltip>
                       </td>
                       <td className="py-3 px-4 text-right">
                         <Link

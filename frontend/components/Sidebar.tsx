@@ -15,6 +15,7 @@ import {
   Zap,
   RefreshCw,
   Scale,
+  Sparkles,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -24,6 +25,13 @@ const NAV_ITEMS = [
     icon: LayoutDashboard,
     badge: 'Real-time',
     description: 'Executive revenue recovery metrics & charts',
+  },
+  {
+    label: 'Demo Scenarios',
+    href: '/scenarios',
+    icon: Sparkles,
+    badge: 'Phase 25',
+    description: '8 deterministic reproducible recovery scenarios',
   },
   {
     label: 'Transactions',
@@ -84,7 +92,7 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 flex-shrink-0 border-r border-fintech-border bg-fintech-panel/70 flex flex-col justify-between p-4 min-h-[calc(100vh-4rem)]">
+    <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-fintech-border bg-fintech-panel/70 flex-col justify-between p-4 min-h-[calc(100vh-4rem)]">
       {/* Navigation Menu */}
       <div className="space-y-1">
         <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">

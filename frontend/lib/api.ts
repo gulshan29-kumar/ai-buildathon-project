@@ -104,7 +104,10 @@ export interface AgentDecisionResponse {
   recovery_probability: number;
   expected_recovery_value: number;
   reasoning_summary: string;
+  reasoning?: string;
   policy_status: string;
+  policy_rule_id?: string;
+  evaluation_latency_ms?: number;
   candidates: CandidateAction[];
   fallback_used: boolean;
 }
@@ -860,3 +863,201 @@ export function getActionBadge(action: string): { bg: string; text: string; bord
       return { bg: 'bg-slate-900', text: 'text-slate-300', border: 'border-slate-800' };
   }
 }
+
+// =====================================================================
+// PHASE 25: CURATED DEMO SCENARIOS INTERFACES & API FUNCTIONS
+// =====================================================================
+
+export interface CuratedScenarioSummary {
+  scenario_id: string;
+  index: number;
+  title: string;
+  category: string;
+  badge_color: string;
+  description: string;
+  amount: number;
+  currency: string;
+  payment_method: string;
+  failure_code: string;
+  risk_score: number;
+  customer_name: string;
+  merchant_name: string;
+  expected_action: string;
+  is_executed: boolean;
+  recovered: boolean;
+  revenue_recovered: number;
+  selected_action: string;
+  policy_outcome: string;
+  last_run_timestamp?: string;
+}
+
+export interface CuratedScenarioTrace {
+  scenario_id: string;
+  index: number;
+  title: string;
+  category: string;
+  executed_at: string;
+  input: {
+    scenario_id: string;
+    title: string;
+    description: string;
+    transaction_id: string;
+    amount: number;
+    currency: string;
+    payment_method: string;
+    gateway: string;
+    failure_code: string;
+    risk_score: number;
+    initial_status: string;
+    attempt_number: number;
+    customer: {
+      customer_id: string;
+      name: string;
+      preferred_payment_method: string;
+      risk_score: number;
+      success_rate: number;
+      total_transactions: number;
+    };
+    merchant: {
+      merchant_id: string;
+      name: string;
+      business_type: string;
+    };
+    timestamp: string;
+    idempotency_key: string;
+    metadata: Record<string, any>;
+  };
+  root_cause: {
+    failure_code: string;
+    category: string;
+    diagnosed_cause: string;
+    confidence: number;
+    is_retryable: boolean;
+    recommended_action: string;
+    explanation: string;
+    raw_attributes: Record<string, any>;
+  };
+  ml_prediction: {
+    model_version: string;
+    recovery_probability: number;
+    expected_value: number;
+    confidence_band: {
+      lower: number;
+      upper: number;
+    };
+    feature_contributions: Record<string, number>;
+    inference_latency_ms: number;
+  };
+  candidate_actions: Array<{
+    action: string;
+    probability: number;
+    expected_recovery_value: number;
+    rank: number;
+    permitted_by_policy: boolean;
+    policy_reason: string;
+  }>;
+  policy: {
+    decision: string;
+    outcome: string;
+    rule_id: string;
+    reason: string;
+    severity: string;
+    recommended_action: string;
+    rules_evaluated: Array<{
+      rule_id: string;
+      title: string;
+      status: string;
+      severity: string;
+    }>;
+    enforced_constraints: {
+      max_retries_allowed: number;
+      current_attempt: number;
+      fraud_threshold: number;
+      cooling_period_seconds: number;
+    };
+  };
+  agent_decision: {
+    selected_action: string;
+    reasoning: string;
+    execution_parameters: Record<string, any>;
+    fallback_mode: boolean;
+    execution_pipeline: string[];
+    agent_latency_ms: number;
+  };
+  simulator_result: {
+    execution_status: string;
+    from_state: string;
+    to_state: string;
+    latency_ms: number;
+    gateway_response: {
+      response_code: string;
+      rrn: string;
+      simulated_rail: string;
+    };
+    terminal: boolean;
+    simulated: boolean;
+    environment: string;
+  };
+  revenue_recovered: {
+    amount: number;
+    currency: string;
+    recovered: boolean;
+    status: string;
+    economic_impact_summary: string;
+    revenue_at_risk: number;
+    recovery_rate_contribution: number;
+  };
+  audit_trail: {
+    total_events: number;
+    verified_integrity: boolean;
+    latest_hash: string | null;
+    events: Array<{
+      index: number;
+      event_id: string;
+      timestamp: string;
+      actor: string;
+      event_type: string;
+      hash: string;
+      previous_hash: string | null;
+    }>;
+  };
+}
+
+export interface CuratedScenariosBatchSummary {
+  total_scenarios: number;
+  executed_count: number;
+  recovered_count: number;
+  recovery_rate: number;
+  total_revenue_at_risk: number;
+  total_revenue_recovered: number;
+  prevented_fraud_losses: number;
+  timestamp: string;
+  traces: CuratedScenarioTrace[];
+}
+
+export async function getCuratedScenarios(): Promise<{ scenarios: CuratedScenarioSummary[]; total: number }> {
+  return request<{ scenarios: CuratedScenarioSummary[]; total: number }>('/api/scenarios');
+}
+
+export async function getCuratedScenarioTrace(scenarioId: string): Promise<CuratedScenarioTrace> {
+  return request<CuratedScenarioTrace>(`/api/scenarios/${encodeURIComponent(scenarioId)}`);
+}
+
+export async function runCuratedScenario(scenarioId: string): Promise<CuratedScenarioTrace> {
+  return request<CuratedScenarioTrace>(`/api/scenarios/${encodeURIComponent(scenarioId)}/run`, {
+    method: 'POST',
+  });
+}
+
+export async function runAllCuratedScenarios(): Promise<CuratedScenariosBatchSummary> {
+  return request<CuratedScenariosBatchSummary>('/api/scenarios/run-all', {
+    method: 'POST',
+  });
+}
+
+export async function resetCuratedScenarios(): Promise<{ status: string; summary: CuratedScenariosBatchSummary }> {
+  return request<{ status: string; summary: CuratedScenariosBatchSummary }>('/api/scenarios/reset', {
+    method: 'POST',
+  });
+}
+

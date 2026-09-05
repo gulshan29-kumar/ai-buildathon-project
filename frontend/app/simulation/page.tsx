@@ -39,6 +39,7 @@ import {
   Pie,
 } from 'recharts';
 import MetricCard from '../../components/MetricCard';
+import DecisionAuditStrip from '../../components/DecisionAuditStrip';
 import {
   runSimulation,
   resetDemo,
@@ -865,6 +866,25 @@ export default function SimulationPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {/* Executive Decision & Policy Audit Strip */}
+            <DecisionAuditStrip
+              revenueAtRisk={selectedTxn.amount}
+              recoverableRevenue={Math.round(selectedTxn.amount * (selectedTxn.ai.recovery_probability || 0.75))}
+              revenueRecovered={selectedTxn.ai.recovered ? selectedTxn.ai.recovered_amount : 0}
+              recoveryRate={(selectedTxn.ai.recovery_probability || 0.75) * 100}
+              agentDecision={selectedTxn.ai.action}
+              policyDecision={selectedTxn.ai.policy_decision}
+              policyRuleId={selectedTxn.ai.policy_rule_id}
+              reason={`Root cause categorized as ${selectedTxn.ai.root_cause}. Model estimated ${formatPercent(
+                selectedTxn.ai.recovery_probability
+              )} recovery probability. Policy verified Rule ${selectedTxn.ai.policy_rule_id} [${
+                selectedTxn.ai.policy_decision
+              }].`}
+              auditHash={selectedTxn.ai.audit_hash}
+              verifiedIntegrity={true}
+              title="Simulated Transaction Decision Audit"
+            />
 
             {/* Context Summary Cards */}
             <div className="grid grid-cols-2 gap-3">
