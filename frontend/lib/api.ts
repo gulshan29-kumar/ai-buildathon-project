@@ -1,3 +1,18 @@
+import {
+  MOCK_DASHBOARD_METRICS,
+  MOCK_CURATED_SCENARIOS,
+  getMockCuratedScenarioTrace,
+  MOCK_TRANSACTIONS,
+  MOCK_BASELINE_COMPARISON,
+  MOCK_MODEL_PERFORMANCE_REPORT,
+  MOCK_LATEST_BENCHMARK,
+  MOCK_SUBSCRIPTIONS,
+  MOCK_SUBSCRIPTION_METRICS,
+  MOCK_SIMULATION_RUN,
+  MOCK_CHECKOUT_SESSIONS,
+  MOCK_POLICIES,
+} from './mockFallback';
+
 const getApiBase = (): string => {
   // If explicitly configured to hit backend directly from client or edge
   if (process.env.NEXT_PUBLIC_API_URL) {
@@ -410,23 +425,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 function getFallbackForEndpoint(endpoint: string, options: RequestInit = {}): any {
-  // Dynamically require mock fallback data
   try {
-    const {
-      MOCK_DASHBOARD_METRICS,
-      MOCK_CURATED_SCENARIOS,
-      getMockCuratedScenarioTrace,
-      MOCK_TRANSACTIONS,
-      MOCK_BASELINE_COMPARISON,
-      MOCK_MODEL_PERFORMANCE_REPORT,
-      MOCK_LATEST_BENCHMARK,
-      MOCK_SUBSCRIPTIONS,
-      MOCK_SUBSCRIPTION_METRICS,
-      MOCK_SIMULATION_RUN,
-      MOCK_CHECKOUT_SESSIONS,
-      MOCK_POLICIES,
-    } = require('./mockFallback');
-
     // Health check
     if (endpoint.startsWith('/api/health')) {
       return {
@@ -661,7 +660,7 @@ function getFallbackForEndpoint(endpoint: string, options: RequestInit = {}): an
         reasoning_summary: firstScenario.description,
         reasoning: firstScenario.description,
         policy_status: 'PERMITTED',
-        policy_rule_id: firstScenario.expected_rule_id,
+        policy_rule_id: (firstScenario as any).expected_rule_id || 'POL-004',
         evaluation_latency_ms: 4.2,
         candidates: [
           {
@@ -670,7 +669,7 @@ function getFallbackForEndpoint(endpoint: string, options: RequestInit = {}): an
             expected_recovery_value: Math.round(firstScenario.amount * 0.88),
             permitted: true,
             policy_outcome: 'PERMITTED',
-            rule_id: firstScenario.expected_rule_id,
+            rule_id: (firstScenario as any).expected_rule_id || 'POL-004',
           },
         ],
         fallback_used: false,
