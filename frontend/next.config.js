@@ -4,16 +4,21 @@ const rawBackendUrl =
   process.env.NEXT_PUBLIC_BACKEND_API_URL ||
   process.env.NEXT_PUBLIC_API_URL;
 
-let apiDestination = 'http://127.0.0.1:8000/api/:path*';
+let apiDestination = null;
 
 if (rawBackendUrl) {
   const cleanUrl = rawBackendUrl.replace(/\/+$/, '');
   apiDestination = cleanUrl.endsWith('/api') ? `${cleanUrl}/:path*` : `${cleanUrl}/api/:path*`;
+} else if (process.env.NODE_ENV !== 'production') {
+  apiDestination = 'http://127.0.0.1:8000/api/:path*';
 }
 
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
+    if (!apiDestination) {
+      return [];
+    }
     return [
       {
         source: '/api/:path*',
