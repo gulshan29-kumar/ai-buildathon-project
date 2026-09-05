@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Scale,
   Play,
@@ -150,29 +150,7 @@ export default function BaselineComparisonPage() {
   const [selectedTxTrace, setSelectedTxTrace] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'metrics' | 'charts' | 'traces'>('metrics');
 
-  const fetchLatest = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await getLatestBenchmark();
-      setData(res);
-      if (res?.traces && res.traces.length > 0) {
-        setSelectedTxTrace(res.traces[0].transaction_id);
-      }
-    } catch (err: any) {
-      console.warn('No existing benchmark found or backend offline:', err);
-      // Attempt to auto-run with seed 42
-      handleRunBenchmark(50, 42);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLatest();
-  }, []);
-
-  const handleRunBenchmark = async (count?: number, seed?: number) => {
+  const handleRunBenchmark = useCallback(async (count?: number, seed?: number) => {
     setRunning(true);
     setError(null);
     try {
@@ -194,7 +172,29 @@ export default function BaselineComparisonPage() {
       setRunning(false);
       setLoading(false);
     }
-  };
+  }, [nTransactions, randomSeed]);
+
+  const fetchLatest = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getLatestBenchmark();
+      setData(res);
+      if (res?.traces && res.traces.length > 0) {
+        setSelectedTxTrace(res.traces[0].transaction_id);
+      }
+    } catch (err: any) {
+      console.warn('No existing benchmark found or backend offline:', err);
+      // Attempt to auto-run with seed 42
+      handleRunBenchmark(50, 42);
+    } finally {
+      setLoading(false);
+    }
+  }, [handleRunBenchmark]);
+
+  useEffect(() => {
+    fetchLatest();
+  }, [fetchLatest]);
 
   // Helper metrics for the comparison summary
   const fixedRetry = data?.strategies?.['FIXED_RETRY_RULE'];

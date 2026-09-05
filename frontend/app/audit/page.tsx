@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -34,7 +34,7 @@ export default function AuditPage() {
   const [selectedActor, setSelectedActor] = useState('ALL');
   const [expandedAuditId, setExpandedAuditId] = useState<string | null>(null);
 
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogs = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -52,11 +52,11 @@ export default function AuditPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchTxn, selectedActor]);
 
   useEffect(() => {
     fetchAuditLogs();
-  }, [selectedActor]);
+  }, [fetchAuditLogs]);
 
   const toggleExpand = (id: string) => {
     setExpandedAuditId((prev) => (prev === id ? null : id));

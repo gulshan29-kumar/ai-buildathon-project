@@ -1,6 +1,6 @@
 {
-  "benchmark_id": "bench_20260905_142925_8cb061",
-  "timestamp": "2026-09-05T14:29:25.580513+00:00",
+  "benchmark_id": "bench_20260905_142902_59295e",
+  "timestamp": "2026-09-05T14:29:02.476644+00:00",
   "seed": 99,
   "scenario": "mixed_failures",
   "total_transactions": 25,

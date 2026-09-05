@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   RefreshCw,
@@ -48,7 +48,7 @@ export default function SubscriptionsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
 
-  const fetchSubscriptions = async () => {
+  const fetchSubscriptions = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -63,11 +63,11 @@ export default function SubscriptionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     fetchSubscriptions();
-  }, [statusFilter]);
+  }, [fetchSubscriptions]);
 
   const handleRunRecovery = async (e: React.MouseEvent, sub: Subscription) => {
     e.stopPropagation();
