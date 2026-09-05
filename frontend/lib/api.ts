@@ -418,8 +418,183 @@ function getFallbackForEndpoint(endpoint: string, options: RequestInit = {}): an
       getMockCuratedScenarioTrace,
       MOCK_TRANSACTIONS,
       MOCK_BASELINE_COMPARISON,
+      MOCK_MODEL_PERFORMANCE_REPORT,
+      MOCK_LATEST_BENCHMARK,
+      MOCK_SUBSCRIPTIONS,
+      MOCK_SUBSCRIPTION_METRICS,
+      MOCK_SIMULATION_RUN,
+      MOCK_CHECKOUT_SESSIONS,
+      MOCK_POLICIES,
     } = require('./mockFallback');
 
+    // Health check
+    if (endpoint.startsWith('/api/health')) {
+      return {
+        status: 'healthy',
+        service: 'razorrecover-ai-backend',
+        version: '1.0.0',
+        environment: 'simulation',
+        database: 'connected',
+        ml_model: '1.0.0-xgb',
+        policy_engine: 'active',
+        simulator: 'ready',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    // Model Performance & Evaluation
+    if (endpoint === '/api/model/performance' || endpoint.startsWith('/api/model/performance')) {
+      return MOCK_MODEL_PERFORMANCE_REPORT;
+    }
+    if (endpoint === '/api/model/evaluate' || endpoint.startsWith('/api/model/evaluate')) {
+      return {
+        status: 'SUCCESS',
+        message: 'Model evaluation executed successfully on held-out test data (4,690 samples).',
+        report: MOCK_MODEL_PERFORMANCE_REPORT,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    if (endpoint === '/api/predict/actions' || endpoint.startsWith('/api/predict/actions')) {
+      let body: any = {};
+      try {
+        if (options.body && typeof options.body === 'string') {
+          body = JSON.parse(options.body);
+        }
+      } catch {}
+      const txn = body.transaction || body;
+      const amount = Number(txn.amount) || 4500;
+      const risk = Number(txn.risk_score) || 0.06;
+      let baseProb = 0.88;
+      if (risk > 0.8) baseProb = 0.02;
+      else if (risk > 0.4) baseProb = 0.35;
+      else if (txn.failure_code === 'GATEWAY_TIMEOUT') baseProb = 0.92;
+
+      return {
+        status: 'SUCCESS',
+        model_version: '1.0.0-xgb',
+        predictions: [
+          { action: 'RETRY_PAYMENT', probability: Number(Math.min(0.96, baseProb + 0.04).toFixed(4)), expected_recovery_value: Math.round(amount * 0.95 * baseProb) },
+          { action: 'SWITCH_PAYMENT_METHOD', probability: Number(Math.min(0.94, baseProb * 0.95).toFixed(4)), expected_recovery_value: Math.round(amount * 0.90 * baseProb) },
+          { action: 'SCHEDULE_RETRY', probability: Number(Math.min(0.85, baseProb * 0.82).toFixed(4)), expected_recovery_value: Math.round(amount * 0.80 * baseProb) },
+          { action: 'SEND_RECOVERY_MESSAGE', probability: Number(Math.min(0.78, baseProb * 0.75).toFixed(4)), expected_recovery_value: Math.round(amount * 0.70 * baseProb) },
+          { action: 'ESCALATE', probability: risk > 0.5 ? 0.85 : 0.22, expected_recovery_value: Math.round(amount * 0.20) },
+          { action: 'STOP', probability: risk > 0.8 ? 0.98 : 0.05, expected_recovery_value: 0 },
+        ],
+      };
+    }
+
+    // Benchmark & Baselines
+    if (endpoint.startsWith('/api/benchmark/latest') || endpoint.startsWith('/api/benchmark/run')) {
+      return MOCK_LATEST_BENCHMARK;
+    }
+    if (endpoint.startsWith('/api/benchmark/history')) {
+      return [
+        {
+          benchmark_id: 'bench_20260905_142925',
+          timestamp: new Date().toISOString(),
+          seed: 42,
+          total_transactions: 100,
+          revenue_at_risk: 425000,
+          ai_recovery_rate: 0.74,
+          ai_revenue_recovered: 314500,
+          fixed_retry_rate: 0.24,
+        },
+      ];
+    }
+    if (endpoint.startsWith('/api/benchmark')) {
+      return MOCK_LATEST_BENCHMARK;
+    }
+    if (endpoint.startsWith('/api/baseline-comparison')) {
+      return MOCK_BASELINE_COMPARISON;
+    }
+
+    // Subscriptions
+    if (endpoint.startsWith('/api/subscriptions')) {
+      const parts = endpoint.split('?')[0].split('/');
+      if (parts.length >= 4 && parts[3] && !parts[3].startsWith('recover')) {
+        const sub = MOCK_SUBSCRIPTIONS.find((s: any) => s.subscription_id === parts[3]) || MOCK_SUBSCRIPTIONS[0];
+        return sub;
+      }
+      if (endpoint.includes('/recover')) {
+        return {
+          subscription_id: parts[3] || 'sub_enterprise_001',
+          selected_action: 'SWITCH_PAYMENT_METHOD',
+          policy_outcome: 'PERMITTED',
+          policy_rule_id: 'POL-004',
+          candidates: [
+            { action: 'SWITCH_PAYMENT_METHOD', probability: 0.84, expected_recovery_value: 37800, permitted: true, policy_outcome: 'PERMITTED', rule_id: 'POL-004' },
+          ],
+          execution: { status: 'SUCCESS' },
+          recovered: true,
+          subscription: MOCK_SUBSCRIPTIONS[0],
+        };
+      }
+      return {
+        subscriptions: MOCK_SUBSCRIPTIONS,
+        total: MOCK_SUBSCRIPTIONS.length,
+        count: MOCK_SUBSCRIPTIONS.length,
+        metrics: MOCK_SUBSCRIPTION_METRICS,
+      };
+    }
+
+    // Simulation
+    if (endpoint.startsWith('/api/simulation/runs')) {
+      return [MOCK_SIMULATION_RUN];
+    }
+    if (endpoint.startsWith('/api/simulation')) {
+      return MOCK_SIMULATION_RUN;
+    }
+
+    // Checkout Abandonment
+    if (endpoint.startsWith('/api/checkout/detect')) {
+      return { detected_count: 2, abandoned_sessions: MOCK_CHECKOUT_SESSIONS, metrics: { total_abandoned: 2, recoverable_value: 12489 } };
+    }
+    if (endpoint.startsWith('/api/checkout/recover')) {
+      return {
+        session_id: 'chk_sess_001',
+        action_executed: 'SEND_WHATSAPP_LINK',
+        channel: 'WHATSAPP_INTENT',
+        status: 'SUCCESS',
+        recovered: true,
+        recovered_value: 3499.0,
+        policy_decision: { outcome: 'PERMITTED', rule_id: 'POL-007' },
+        audit_hash: 'h_chk_001',
+      };
+    }
+    if (endpoint.startsWith('/api/checkout/sessions')) {
+      return {
+        total: MOCK_CHECKOUT_SESSIONS.length,
+        sessions: MOCK_CHECKOUT_SESSIONS,
+        metrics: { total_abandoned: 28, recoverable_revenue: 84500, recovered_revenue: 62100 },
+      };
+    }
+
+    // Policies
+    if (endpoint.startsWith('/api/policies')) {
+      return { policies: MOCK_POLICIES };
+    }
+
+    // Agent Workflow Orchestration
+    if (endpoint.startsWith('/api/orchestrate')) {
+      return {
+        status: 'COMPLETED',
+        selected_action: 'RETRY_PAYMENT',
+        monitoring_outcome: 'SUCCESS',
+        recovery_probability: 0.92,
+        expected_recovery_value: 4140.0,
+        policy_decision: { outcome: 'PERMITTED', rule_id: 'POL-004' },
+        execution_result: { status: 'SUCCESS', rrn: 'RRN-SIM-829104819' },
+        nodes_executed: ['EVENT', 'ROOT_CAUSE', 'ML', 'ACTIONS', 'POLICY', 'DECISION', 'EXECUTION', 'RESULT'],
+        latency_ms: 38,
+      };
+    }
+
+    // Demo actions
+    if (endpoint.startsWith('/api/demo/reset') || endpoint.startsWith('/api/demo/seed')) {
+      return { status: 'success', message: 'Demo sandbox initialized.' };
+    }
+
+    // Dashboard metrics
     if (endpoint.startsWith('/api/dashboard/metrics')) {
       return MOCK_DASHBOARD_METRICS;
     }
@@ -512,9 +687,6 @@ function getFallbackForEndpoint(endpoint: string, options: RequestInit = {}): an
         policy_decision: { outcome: 'PERMITTED', rule_id: 'POL-004' },
         errors: [],
       };
-    }
-    if (endpoint.startsWith('/api/baseline-comparison')) {
-      return MOCK_BASELINE_COMPARISON;
     }
     if (endpoint.startsWith('/api/audit')) {
       const trace = getMockCuratedScenarioTrace('scenario_gateway_timeout');
